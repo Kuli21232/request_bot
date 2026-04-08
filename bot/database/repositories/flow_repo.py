@@ -3,7 +3,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from models.flow import FlowCase, FlowSignal
+from models.flow import FlowCase, FlowSignal, SignalMedia
 
 
 class FlowRepository:
@@ -15,6 +15,12 @@ class FlowRepository:
         self.session.add(signal)
         await self.session.flush()
         return signal
+
+    async def create_signal_media(self, **kwargs) -> SignalMedia:
+        media = SignalMedia(**kwargs)
+        self.session.add(media)
+        await self.session.flush()
+        return media
 
     async def list_recent_signals(
         self,

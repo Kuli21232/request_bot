@@ -30,6 +30,8 @@ async def list_signals(
         .options(
             selectinload(FlowSignal.case),
             selectinload(FlowSignal.department),
+            selectinload(FlowSignal.topic),
+            selectinload(FlowSignal.media_items),
             selectinload(FlowSignal.request),
             selectinload(FlowSignal.submitter),
         )
@@ -80,6 +82,8 @@ async def get_signal(
         .options(
             selectinload(FlowSignal.case),
             selectinload(FlowSignal.department),
+            selectinload(FlowSignal.topic),
+            selectinload(FlowSignal.media_items),
             selectinload(FlowSignal.request),
             selectinload(FlowSignal.submitter),
         )
@@ -103,7 +107,7 @@ async def list_cases(
     current_user=Depends(require_agent),
     db: AsyncSession = Depends(get_db),
 ):
-    q = select(FlowCase).options(selectinload(FlowCase.department), selectinload(FlowCase.request))
+    q = select(FlowCase).options(selectinload(FlowCase.department), selectinload(FlowCase.request), selectinload(FlowCase.primary_topic))
 
     if status:
         q = q.where(FlowCase.status == status)
@@ -140,6 +144,7 @@ async def get_case(
         select(FlowCase)
         .options(
             selectinload(FlowCase.department),
+            selectinload(FlowCase.primary_topic),
             selectinload(FlowCase.request),
             selectinload(FlowCase.signals),
         )
@@ -229,6 +234,8 @@ def _serialize_signal(signal: FlowSignal, *, full: bool = False) -> dict:
         "case_title": signal.case.title if signal.case else None,
         "department_id": signal.department_id,
         "department_name": signal.department.name if signal.department else None,
+        "topic_id": signal.topic_id,
+        "topic_title": signal.topic.title if signal.topic else signal.topic_label,
         "request_id": signal.request_id,
         "request_ticket": signal.request.ticket_number if signal.request else None,
         "submitter_id": signal.submitter_id,
@@ -243,6 +250,20 @@ def _serialize_signal(signal: FlowSignal, *, full: bool = False) -> dict:
         data["entities"] = signal.entities or {}
         data["ai_labels"] = signal.ai_labels or {}
         data["media_flags"] = signal.media_flags or {}
+        data["media"] = [
+            {
+                "id": item.id,
+                "kind": item.kind,
+                "mime_type": item.mime_type,
+                "file_name": item.file_name,
+                "original_size": item.original_size,
+                "compressed_size": item.compressed_size,
+                "width": item.width,
+                "height": item.height,
+                "duration_seconds": item.duration_seconds,
+            }
+            for item in signal.media_items or []
+        ]
     return data
 
 
@@ -262,6 +283,8 @@ def _serialize_case(flow_case: FlowCase, *, full: bool = False) -> dict:
         "ai_confidence": flow_case.ai_confidence,
         "department_id": flow_case.department_id,
         "department_name": flow_case.department.name if flow_case.department else None,
+        "primary_topic_id": flow_case.primary_topic_id,
+        "primary_topic_title": flow_case.primary_topic.title if flow_case.primary_topic else None,
         "request_id": flow_case.request_id,
         "request_ticket": flow_case.request.ticket_number if flow_case.request else None,
         "last_signal_at": flow_case.last_signal_at.isoformat() if flow_case.last_signal_at else None,

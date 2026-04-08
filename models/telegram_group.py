@@ -16,6 +16,9 @@ class TelegramGroup(Base, TimestampMixin):
     departments: Mapped[list["Department"]] = relationship(
         "Department", back_populates="group", cascade="all, delete-orphan"
     )
+    topics: Mapped[list["TelegramTopic"]] = relationship(
+        "TelegramTopic", back_populates="group", cascade="all, delete-orphan"
+    )
     requests: Mapped[list["Request"]] = relationship(
         "Request", back_populates="group"
     )

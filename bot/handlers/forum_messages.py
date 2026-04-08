@@ -1,30 +1,44 @@
-"""Ключевой хэндлер: захват сообщений из форум-топиков → создание сигналов потока."""
+"""Forum topic ingestion into flow signals, cases, and optional shadow requests."""
 import logging
-from aiogram import Router, F, Bot
+
+from aiogram import Bot, F, Router
 from aiogram.types import Message
 
 from bot.config import settings
 from bot.database import AsyncSessionLocal
 from bot.database.repositories.flow_repo import FlowRepository
 from bot.database.repositories.request_repo import RequestRepository
-from bot.services.duplicate_detector import DuplicateDetector
-from bot.services.auto_router import AutoRouter
-from bot.services.notification_service import NotificationService
-from bot.services.ai_classifier import AIClassifier
-from bot.services.signal_threader import SignalThreader
+from bot.database.repositories.topic_repo import TopicRepository
 from bot.keyboards.inline import build_request_created_keyboard
-from models.user import User
+from bot.services.ai_classifier import AIClassifier
+from bot.services.auto_router import AutoRouter
+from bot.services.duplicate_detector import DuplicateDetector, DuplicateResult
+from bot.services.media_processor import MediaProcessor
+from bot.services.notification_service import NotificationService
+from bot.services.signal_threader import SignalThreader
+from bot.services.topic_ai_engine import TopicAIEngine
 from models.department import Department
+from models.topic import TelegramTopic, TopicAIProfile
+from models.user import User
 
 logger = logging.getLogger(__name__)
 
 router = Router()
 
-# Фильтр: только суперегруппы с топиками, только не-боты
 router.message.filter(
     F.chat.type == "supergroup",
     F.message_thread_id.is_not(None),
 )
+
+
+@router.message(F.forum_topic_created)
+async def handle_forum_topic_created(message: Message) -> None:
+    await _sync_topic_metadata(message, title_override=message.forum_topic_created.name)
+
+
+@router.message(F.forum_topic_edited)
+async def handle_forum_topic_edited(message: Message) -> None:
+    await _sync_topic_metadata(message, title_override=message.forum_topic_edited.name)
 
 
 @router.message(F.text | F.photo | F.document | F.voice | F.audio)
@@ -32,26 +46,28 @@ async def handle_forum_message(
     message: Message,
     bot: Bot,
     department: Department | None,
+    topic: TelegramTopic | None,
+    topic_profile: TopicAIProfile | None,
     db_user: User | None,
 ) -> None:
-    # Пропускаем если это сообщение от бота
-    if message.from_user is None or message.from_user.is_bot:
+    if message.from_user is None or message.from_user.is_bot or db_user is None:
         return
 
-    # Пропускаем если топик не зарегистрирован
-    if department is None:
+    if topic is None or topic_profile is None:
         return
 
-    # Пропускаем если пользователь не идентифицирован
-    if db_user is None:
-        return
+    content = (message.text or message.caption or "").strip()
+    media_processor = MediaProcessor()
+    topic_ai = TopicAIEngine()
+    topic_context = topic_ai.build_context(topic, topic_profile)
+    attachments, media_items, media_flags = await media_processor.extract(
+        message,
+        bot,
+        media_policy=topic_profile.media_policy,
+    )
+    has_media = any(media_flags.values())
 
-    # Извлекаем текст (или подпись к медиа)
-    content = message.text or message.caption or ""
-    attachments = await _extract_attachments(message, bot)
-
-    # Если нет текста и нет вложений — игнорируем
-    if not content.strip() and not attachments:
+    if not content and not attachments:
         return
 
     auto_router = AutoRouter()
@@ -59,69 +75,75 @@ async def handle_forum_message(
     ai_classifier = AIClassifier()
     notification_service = NotificationService(bot)
 
-    # 1. Auto-routing: может перенаправить в другой отдел
     suggested_dept = await auto_router.suggest_department(
         text=content,
-        group_id=department.group_id,
-        exclude_department_id=department.id,
+        group_id=topic.group_id,
+        exclude_department_id=department.id if department else None,
     )
     final_department = suggested_dept if suggested_dept else department
     auto_routed = suggested_dept is not None
     routing_reason = auto_router.last_match_reason
 
-    ai_result = await ai_classifier.classify(content)
-    signal_type = (ai_result or {}).get("signal_type", "request")
-    importance = (ai_result or {}).get("importance", "normal")
-    action_needed = (ai_result or {}).get("action_needed", "digest_only")
-    summary = (ai_result or {}).get("summary") or (content[:120] if content else "Медиа-сигнал")
-    store = (ai_result or {}).get("store")
-    topic_label = (ai_result or {}).get("topic_label")
-    case_key = (ai_result or {}).get("case_key")
-    recommended_action = (ai_result or {}).get("recommended_action")
-    entities = (ai_result or {}).get("entities") or {}
-    ai_confidence = (ai_result or {}).get("confidence")
+    ai_result = await ai_classifier.classify(content, topic_context=topic_context)
+    ai_result = topic_ai.apply_profile(ai_result, topic, topic_profile, has_media=has_media)
 
-    # 2. Дубликаты/повторы ищем уже на уровне потока, но request-слой сохраняем для actionable сигналов
-    dup_result = await duplicate_detector.find_duplicate(
-        content=content,
-        department_id=final_department.id,
-        submitter_id=db_user.id,
-    )
-
-    media_flags = {
-        "has_photo": bool(message.photo),
-        "has_document": bool(message.document),
-        "has_voice": bool(message.voice),
-        "has_audio": bool(message.audio),
-        "has_video": bool(getattr(message, "video", None)),
-    }
-    has_media = any(media_flags.values())
+    signal_type = ai_result.get("signal_type", "request")
     if signal_type == "chat_noise":
         signal_type = "chat/noise"
+    importance = ai_result.get("importance", "normal")
+    action_needed = ai_result.get("action_needed", "digest_only")
+    summary = ai_result.get("summary") or (content[:120] if content else topic.title)
+    store = ai_result.get("store")
+    topic_label = ai_result.get("topic_label") or topic.title
+    case_key = ai_result.get("case_key")
+    recommended_action = ai_result.get("recommended_action")
+    entities = ai_result.get("entities") or {}
+    ai_confidence = ai_result.get("confidence")
+
     is_noise = signal_type == "chat/noise"
     requires_attention = importance in {"high", "critical"} or action_needed in {
         "create_case", "attach_to_case", "suggest_escalation", "route_to_topic",
     }
 
+    dup_result = DuplicateResult(is_duplicate=False)
+    if final_department is not None:
+        dup_result = await duplicate_detector.find_duplicate(
+            content=content,
+            department_id=final_department.id,
+            submitter_id=db_user.id,
+        )
+
     new_request = None
     created_case = None
     matched_case = None
+    signal = None
     match_score = 0.0
 
     async with AsyncSessionLocal() as session:
         flow_repo = FlowRepository(session)
+        topic_repo = TopicRepository(session)
         threader = SignalThreader()
 
-        # Shadow request only for actionable operational messages.
-        if not is_noise and action_needed in {
+        stored_topic = await topic_repo.get_topic(topic.id)
+        if stored_topic is None:
+            return
+
+        stored_profile = stored_topic.profile
+        if stored_profile is None:
+            return
+
+        if final_department is not None and stored_profile.preferred_department_id is None:
+            stored_profile.preferred_department_id = final_department.id
+
+        if final_department is not None and not is_noise and action_needed in {
             "create_case", "attach_to_case", "suggest_escalation", "route_to_topic", "suggest_reply"
         }:
             request_repo = RequestRepository(session)
             new_request = await request_repo.create(
-                group_id=final_department.group_id,
+                group_id=stored_topic.group_id,
                 department_id=final_department.id,
                 submitter_id=db_user.id,
-                body=content,
+                body=content or summary,
                 telegram_message_id=message.message_id,
                 telegram_topic_id=message.message_thread_id,
                 telegram_chat_id=message.chat.id,
@@ -132,20 +154,19 @@ async def handle_forum_message(
                 duplicate_of_id=dup_result.original_id,
                 similarity_score=dup_result.score,
             )
-            if ai_result:
-                new_request.ai_subject = summary
-                new_request.ai_category = signal_type
-                new_request.ai_sentiment = "urgent" if importance in {"high", "critical"} else "neutral"
-                if not new_request.subject:
-                    new_request.subject = summary
-                await session.flush()
+            new_request.ai_subject = summary
+            new_request.ai_category = signal_type
+            new_request.ai_sentiment = "urgent" if importance in {"high", "critical"} else "neutral"
+            if not new_request.subject:
+                new_request.subject = summary
+            await session.flush()
 
         case_match = await threader.match_case(
             flow_repo,
-            group_id=final_department.group_id,
-            department_id=final_department.id,
+            group_id=stored_topic.group_id,
+            department_id=final_department.id if final_department else None,
             summary=summary,
-            body=content,
+            body=content or summary,
             case_key=case_key,
             store=store,
         )
@@ -154,8 +175,9 @@ async def handle_forum_message(
 
         if matched_case is None and action_needed in {"create_case", "attach_to_case", "suggest_escalation"} and not is_noise:
             created_case = await flow_repo.create_case(
-                group_id=final_department.group_id,
-                department_id=final_department.id,
+                group_id=stored_topic.group_id,
+                department_id=final_department.id if final_department else None,
+                primary_topic_id=stored_topic.id,
                 request_id=new_request.id if new_request else None,
                 title=topic_label or summary[:120],
                 summary=summary,
@@ -170,6 +192,7 @@ async def handle_forum_message(
                     "signal_type": signal_type,
                     "action_needed": action_needed,
                     "routing_reason": routing_reason,
+                    "topic_title": stored_topic.title,
                 },
                 recommended_action=recommended_action,
                 ai_confidence=ai_confidence,
@@ -190,8 +213,9 @@ async def handle_forum_message(
             )
 
         signal = await flow_repo.create_signal(
-            group_id=final_department.group_id,
-            department_id=final_department.id,
+            group_id=stored_topic.group_id,
+            department_id=final_department.id if final_department else None,
+            topic_id=stored_topic.id,
             submitter_id=db_user.id,
             request_id=new_request.id if new_request else None,
             case_id=matched_case.id if matched_case else None,
@@ -199,7 +223,7 @@ async def handle_forum_message(
             source_topic_id=message.message_thread_id,
             source_message_id=message.message_id,
             source_chat_id=message.chat.id,
-            body=content,
+            body=content or summary,
             summary=summary,
             store=store,
             kind=signal_type,
@@ -211,10 +235,12 @@ async def handle_forum_message(
             ai_summary=summary,
             ai_labels={
                 "signal_type": signal_type,
-                "tags": (ai_result or {}).get("tags", []),
+                "tags": ai_result.get("tags", []),
                 "auto_routed": auto_routed,
                 "routing_reason": routing_reason,
                 "match_score": match_score,
+                "topic_kind": stored_topic.topic_kind,
+                "topic_profile_version": stored_topic.profile_version,
             },
             entities=entities,
             media_flags=media_flags,
@@ -225,30 +251,40 @@ async def handle_forum_message(
             digest_bucket=signal_type if signal_type in {"photo_report", "news", "status_update"} else "operations",
             ai_confidence=ai_confidence,
         )
+
+        for media_item in media_items:
+            await flow_repo.create_signal_media(signal_id=signal.id, **media_item)
+
+        topic_ai.observe_signal(
+            stored_profile,
+            signal_type=signal_type,
+            action_needed=action_needed,
+            importance=importance,
+            has_media=has_media,
+        )
+        await topic_repo.mark_signal_recorded(stored_topic)
         await session.commit()
 
-    # 3. Формируем mini_app_url отдельно от webhook-домена
     mini_app_url = (
         f"{settings.MINIAPP_BASE_URL.rstrip('/')}/signals/{signal.id}"
         if settings.MINIAPP_BASE_URL
         else f"https://t.me/{(await bot.get_me()).username}"
     )
 
-    # 4. Ответ пользователю только когда есть смысловая автоматизация, чтобы не зашумлять поток
     response_lines = [
-        f"🧠 <b>Сигнал обработан</b>",
+        "🧠 <b>Сигнал обработан</b>",
         f"Тема: {summary}",
+        f"Топик: <b>{topic.title}</b>",
         f"Тип: <b>{_signal_type_label(signal_type)}</b>",
     ]
 
-    if auto_routed:
+    if auto_routed and department and final_department:
         response_lines.append(f"↪️ Маршрутизация: из <i>{department.name}</i> в <i>{final_department.name}</i>")
 
     if matched_case:
-        if created_case:
-            response_lines.append(f"🗂 Создан кейс: <b>{matched_case.title}</b>")
-        else:
-            response_lines.append(f"🗂 Добавлено в кейс: <b>{matched_case.title}</b>")
+        response_lines.append(
+            f"🗂 {'Создан кейс' if created_case else 'Добавлено в кейс'}: <b>{matched_case.title}</b>"
+        )
 
     if new_request is not None:
         response_lines.append(f"🎫 Actionable задача: <code>{new_request.ticket_number}</code>")
@@ -268,41 +304,8 @@ async def handle_forum_message(
     if requires_attention or created_case or new_request is not None:
         await message.reply("\n".join(response_lines), reply_markup=keyboard, parse_mode="HTML")
 
-    # 5. Уведомляем агентов только по actionable кейсам/задачам
-    if new_request is not None:
+    if new_request is not None and final_department is not None:
         await notification_service.notify_new_request(new_request, final_department)
-
-
-async def _extract_attachments(message: Message, bot: Bot) -> list[dict]:
-    attachments = []
-    if message.photo:
-        photo = message.photo[-1]
-        file = await bot.get_file(photo.file_id)
-        attachments.append({
-            "type": "photo",
-            "file_id": photo.file_id,
-            "file_path": file.file_path,
-        })
-    if message.document:
-        attachments.append({
-            "type": "document",
-            "file_id": message.document.file_id,
-            "file_name": message.document.file_name,
-            "mime_type": message.document.mime_type,
-        })
-    if message.voice:
-        attachments.append({
-            "type": "voice",
-            "file_id": message.voice.file_id,
-            "duration": message.voice.duration,
-        })
-    if message.audio:
-        attachments.append({
-            "type": "audio",
-            "file_id": message.audio.file_id,
-            "file_name": message.audio.file_name,
-        })
-    return attachments
 
 
 def _signal_type_label(signal_type: str) -> str:
@@ -315,8 +318,29 @@ def _signal_type_label(signal_type: str) -> str:
         "finance": "Финансы",
         "compliance": "Комплаенс",
         "inventory": "Остатки/товар",
-        "chat_noise": "Шум/уточнение",
+        "chat/noise": "Шум/уточнение",
         "escalation": "Эскалация",
         "news": "Новость",
     }
     return labels.get(signal_type, signal_type)
+
+
+async def _sync_topic_metadata(message: Message, *, title_override: str) -> None:
+    if message.message_thread_id is None:
+        return
+
+    async with AsyncSessionLocal() as session:
+        topic_repo = TopicRepository(session)
+        department = await topic_repo.get_department_by_topic(
+            chat_id=message.chat.id,
+            topic_id=message.message_thread_id,
+        )
+        await topic_repo.ensure_topic(
+            chat_id=message.chat.id,
+            chat_title=message.chat.title or "Telegram group",
+            topic_id=message.message_thread_id,
+            topic_title=title_override,
+            department=department,
+            seen_at=message.date,
+        )
+        await session.commit()

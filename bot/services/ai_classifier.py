@@ -40,11 +40,24 @@ class AIClassifier:
         self.base_url = settings.OLLAMA_BASE_URL
         self.model = settings.OLLAMA_MODEL
 
-    async def classify(self, text: str) -> dict | None:
+    async def classify(self, text: str, topic_context: dict | None = None) -> dict | None:
         if not self.enabled or not text:
             return None
 
-        prompt = CLASSIFY_PROMPT + text[:2000]
+        context_block = ""
+        if topic_context:
+            context_block = (
+                f"\nКонтекст топика:\n"
+                f"- title: {topic_context.get('topic_title')}\n"
+                f"- topic_kind: {topic_context.get('topic_kind')}\n"
+                f"- allowed_signal_types: {topic_context.get('allowed_signal_types')}\n"
+                f"- default_actions: {topic_context.get('default_actions')}\n"
+                f"- priority_rules: {topic_context.get('priority_rules')}\n"
+                f"- behavior_rules: {topic_context.get('behavior_rules')}\n"
+                f"- profile_summary: {topic_context.get('profile_summary')}\n"
+            )
+
+        prompt = CLASSIFY_PROMPT + context_block + "\n" + text[:2000]
 
         try:
             async with aiohttp.ClientSession() as client:
