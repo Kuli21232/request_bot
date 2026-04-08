@@ -109,10 +109,10 @@ async def handle_forum_message(
                     req.subject = ai_result.get("subject")
                 await session.commit()
 
-    # 5. Формируем mini_app_url (используем WEBHOOK_BASE_URL как базу)
+    # 5. Формируем mini_app_url отдельно от webhook-домена
     mini_app_url = (
-        f"{settings.WEBHOOK_BASE_URL.rstrip('/')}/app/requests/{new_request.id}"
-        if settings.WEBHOOK_BASE_URL
+        f"{settings.MINIAPP_BASE_URL.rstrip('/')}/requests/{new_request.id}"
+        if settings.MINIAPP_BASE_URL
         else f"https://t.me/{(await bot.get_me()).username}"
     )
 

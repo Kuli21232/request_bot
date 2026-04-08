@@ -7,8 +7,10 @@ class Settings(BaseSettings):
     # Telegram
     BOT_TOKEN: str
     WEBHOOK_BASE_URL: str = ""
+    MINIAPP_BASE_URL: str = ""
     BOT_PORT: int = 8080
-    # Если WEBHOOK_BASE_URL пустой — используем polling
+    # Если WEBHOOK_BASE_URL пустой — используем polling.
+    # MINIAPP_BASE_URL используется только для ссылок Web App.
 
     # PostgreSQL
     DATABASE_URL: str  # postgresql+asyncpg://user:pass@host:5432/db
