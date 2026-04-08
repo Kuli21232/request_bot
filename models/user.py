@@ -1,0 +1,53 @@
+from sqlalchemy import BigInteger, Boolean, Enum as SAEnum, ForeignKey, String
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column, relationship
+from datetime import datetime
+from sqlalchemy import DateTime, func
+
+from models.base import Base, TimestampMixin
+from models.enums import UserRole
+
+DEFAULT_NOTIFICATION_PREFS = {
+    "on_status_change": True,
+    "on_assignment": True,
+    "on_comment": True,
+    "digest_frequency": "daily",
+}
+
+
+class User(Base, TimestampMixin):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    telegram_user_id: Mapped[int | None] = mapped_column(BigInteger, unique=True, nullable=True)
+    email: Mapped[str | None] = mapped_column(String(255), unique=True, nullable=True)
+    # bcrypt hash — только для admin-пользователей сайта
+    password_hash: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    username: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    first_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    last_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    language_code: Mapped[str] = mapped_column(String(10), default="ru", nullable=False)
+    role: Mapped[UserRole] = mapped_column(
+        SAEnum(UserRole, name="user_role", values_callable=lambda x: [e.value for e in x], create_type=False),
+        default=UserRole.user, nullable=False
+    )
+    is_banned: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    notification_preferences: Mapped[dict] = mapped_column(
+        JSONB, default=DEFAULT_NOTIFICATION_PREFS, nullable=False
+    )
+    last_active_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    submitted_requests: Mapped[list["Request"]] = relationship(
+        "Request", back_populates="submitter", foreign_keys="Request.submitter_id"
+    )
+    assigned_requests: Mapped[list["Request"]] = relationship(
+        "Request", back_populates="assigned_to", foreign_keys="Request.assigned_to_id"
+    )
+    comments: Mapped[list["RequestComment"]] = relationship(
+        "RequestComment", back_populates="author"
+    )
+    department_memberships: Mapped[list["DepartmentAgent"]] = relationship(
+        "DepartmentAgent", back_populates="agent"
+    )

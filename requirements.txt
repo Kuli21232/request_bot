@@ -1,0 +1,28 @@
+# ── Telegram Bot ──────────────────────────────────────────────
+aiogram==3.13.0
+aiohttp==3.10.10
+
+# ── FastAPI & ASGI ────────────────────────────────────────────
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+python-multipart==0.0.12
+
+# ── Database ──────────────────────────────────────────────────
+sqlalchemy==2.0.36
+asyncpg==0.30.0
+alembic==1.14.0
+
+# ── Auth & Security ───────────────────────────────────────────
+python-jose[cryptography]==3.3.0
+bcrypt==4.2.0
+pydantic==2.8.2
+pydantic-settings==2.5.2
+
+# ── NLP / Duplicate Detection ─────────────────────────────────
+rapidfuzz==3.10.1
+
+# ── Scheduling ────────────────────────────────────────────────
+apscheduler==3.10.4
+
+# ── Utilities ─────────────────────────────────────────────────
+python-dotenv==1.0.1
