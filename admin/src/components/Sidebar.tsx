@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard,
+  Network,
   Radio,
   FolderKanban,
   MessageSquare,
@@ -19,6 +20,7 @@ interface SidebarProps {
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Панель' },
+  { to: '/topics', icon: Network, label: 'Топики' },
   { to: '/signals', icon: Radio, label: 'Сигналы' },
   { to: '/cases', icon: FolderKanban, label: 'Кейсы' },
   { to: '/requests', icon: MessageSquare, label: 'Заявки' },

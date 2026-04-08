@@ -2,6 +2,7 @@ import { Link, useLocation } from 'react-router-dom'
 
 const TABS = [
   { path: '/', label: 'Главная', icon: HomeIcon },
+  { path: '/topics', label: 'Топики', icon: TopicIcon },
   { path: '/signals', label: 'Сигналы', icon: ListIcon },
   { path: '/cases', label: 'Кейсы', icon: FolderIcon },
   { path: '/my', label: 'Мои', icon: UserIcon },
@@ -31,6 +32,16 @@ function FolderIcon({ active }: { active: boolean }) {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={active ? '#2481cc' : '#999'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+    </svg>
+  )
+}
+
+function TopicIcon({ active }: { active: boolean }) {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke={active ? '#2481cc' : '#999'} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 6h16" />
+      <path d="M7 12h10" />
+      <path d="M10 18h4" />
     </svg>
   )
 }

@@ -5,6 +5,7 @@ import { Login } from './pages/Login'
 import { Dashboard } from './pages/Dashboard'
 import { Signals } from './pages/Signals'
 import { Cases } from './pages/Cases'
+import { Topics } from './pages/Topics'
 import { Requests } from './pages/Requests'
 import { RequestDetail } from './pages/RequestDetail'
 import { Analytics } from './pages/Analytics'
@@ -48,6 +49,7 @@ function AppRoutes() {
         }
       >
         <Route index element={<Dashboard />} />
+        <Route path="topics" element={<Topics />} />
         <Route path="signals" element={<Signals />} />
         <Route path="cases" element={<Cases />} />
         <Route path="requests" element={<Requests />} />

@@ -203,6 +203,37 @@ export interface DigestOverview {
   top_kinds: Array<{ kind: string; count: number }>
 }
 
+export interface TopicProfile {
+  preferred_department_id?: number
+  profile_summary?: string
+  allowed_signal_types: string[]
+  default_actions: Record<string, string>
+  priority_rules: Record<string, any>
+  media_policy: Record<string, any>
+  confidence_threshold: number
+  auto_learn_enabled: boolean
+  system_prompt?: string
+  examples?: any[]
+  behavior_rules?: Record<string, any>
+  learning_snapshot?: Record<string, any>
+}
+
+export interface Topic {
+  id: number
+  group_id: number
+  telegram_topic_id: number
+  title: string
+  icon_emoji?: string
+  topic_kind: string
+  is_active: boolean
+  message_count: number
+  media_count: number
+  signal_count: number
+  last_seen_at?: string
+  profile_version: number
+  profile?: TopicProfile
+}
+
 export const authApi = {
   login: (email: string, password: string) =>
     apiClient.post<{ token: string; user: User }>('/api/v1/auth/login', { email, password }),
@@ -275,6 +306,15 @@ export const flowApi = {
 export const departmentsApi = {
   list: () =>
     apiClient.get<Department[]>('/api/v1/departments'),
+}
+
+export const topicsApi = {
+  list: () =>
+    apiClient.get<Topic[]>('/api/v1/topics'),
+  get: (id: number) =>
+    apiClient.get<Topic>(`/api/v1/topics/${id}`),
+  updateProfile: (id: number, payload: Partial<TopicProfile>) =>
+    apiClient.patch<Topic>(`/api/v1/topics/${id}/profile`, payload),
 }
 
 export interface AdminUser {

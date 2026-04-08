@@ -9,6 +9,7 @@ import Signals from './pages/Signals'
 import SignalDetail from './pages/SignalDetail'
 import Cases from './pages/Cases'
 import CaseDetail from './pages/CaseDetail'
+import Topics from './pages/Topics'
 import RequestList from './pages/RequestList'
 import RequestDetail from './pages/RequestDetail'
 import MyRequests from './pages/MyRequests'
@@ -102,6 +103,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/signals" element={<Signals />} />
+          <Route path="/topics" element={<Topics />} />
           <Route path="/signals/:id" element={<SignalDetail />} />
           <Route path="/cases" element={<Cases />} />
           <Route path="/cases/:id" element={<CaseDetail />} />

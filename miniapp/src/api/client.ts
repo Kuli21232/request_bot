@@ -190,6 +190,33 @@ export interface FlowCaseDetail extends FlowCase {
   signals?: FlowSignal[]
 }
 
+export interface TopicProfile {
+  preferred_department_id?: number
+  profile_summary?: string
+  allowed_signal_types: string[]
+  default_actions: Record<string, string>
+  priority_rules: Record<string, any>
+  media_policy: Record<string, any>
+  confidence_threshold: number
+  auto_learn_enabled: boolean
+}
+
+export interface Topic {
+  id: number
+  group_id: number
+  telegram_topic_id: number
+  title: string
+  icon_emoji?: string
+  topic_kind: string
+  is_active: boolean
+  message_count: number
+  media_count: number
+  signal_count: number
+  last_seen_at?: string
+  profile_version: number
+  profile?: TopicProfile
+}
+
 export const authTelegram = async (initData: string): Promise<{ access_token: string }> => {
   const res = await axios.post(`${API_URL}/api/v1/auth/telegram`, { init_data: initData })
   const token = res.data.access_token ?? res.data.token
@@ -288,6 +315,11 @@ export const getCase = async (id: number): Promise<FlowCaseDetail> => {
 
 export const getDigestOverview = async () => {
   const res = await api.get('/api/v1/flow/digests/overview')
+  return res.data
+}
+
+export const getTopics = async (): Promise<Topic[]> => {
+  const res = await api.get('/api/v1/topics')
   return res.data
 }
 
