@@ -64,7 +64,7 @@ async def main_polling() -> None:
         await bot.session.close()
 
 
-async def main_webhook() -> None:
+def main_webhook() -> None:
     """Режим webhook — для продакшена на VDS."""
     from aiohttp import web
     from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
@@ -105,6 +105,6 @@ async def main_webhook() -> None:
 
 if __name__ == "__main__":
     if settings.WEBHOOK_BASE_URL:
-        asyncio.run(main_webhook())
+        main_webhook()
     else:
         asyncio.run(main_polling())
