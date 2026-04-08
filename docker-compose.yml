@@ -33,6 +33,8 @@ services:
 
   ollama:
     image: ollama/ollama:latest
+    profiles:
+      - ai
     restart: unless-stopped
     volumes:
       - ollama_data:/root/.ollama

@@ -71,7 +71,8 @@ docker compose up -d --build
 # 6. Применить миграции
 docker compose exec bot alembic upgrade head
 
-# 7. При необходимости загрузить модель Ollama
+# 7. При необходимости включить AI-профиль и загрузить Ollama
+docker compose --profile ai up -d ollama
 docker compose exec ollama ollama pull llama3
 ```
 
