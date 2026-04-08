@@ -27,8 +27,6 @@ apiClient.interceptors.response.use(
   }
 )
 
-// ─── Types ──────────────────────────────────────────────────────────────────
-
 export type RequestStatus =
   | 'new'
   | 'open'
@@ -151,7 +149,59 @@ export interface MyStats {
   open_requests: number
 }
 
-// ─── API Functions ───────────────────────────────────────────────────────────
+export interface FlowSignal {
+  id: number
+  kind: string
+  importance: string
+  actionability: string
+  summary?: string
+  body: string
+  store?: string
+  topic_label?: string
+  recommended_action?: string
+  has_media: boolean
+  requires_attention: boolean
+  is_noise: boolean
+  digest_bucket?: string
+  ai_confidence?: number
+  case_id?: number
+  case_title?: string
+  department_id?: number
+  department_name?: string
+  request_id?: number
+  request_ticket?: string
+  happened_at: string
+}
+
+export interface FlowCase {
+  id: number
+  title: string
+  summary?: string
+  status: string
+  priority: string
+  kind: string
+  signal_count: number
+  media_count: number
+  is_critical: boolean
+  stores_affected: string[]
+  recommended_action?: string
+  ai_confidence?: number
+  department_id?: number
+  department_name?: string
+  request_id?: number
+  request_ticket?: string
+  last_signal_at?: string
+  updated_at?: string
+}
+
+export interface DigestOverview {
+  total_signals: number
+  requires_attention: number
+  with_media: number
+  noise: number
+  critical_cases: number
+  top_kinds: Array<{ kind: string; count: number }>
+}
 
 export const authApi = {
   login: (email: string, password: string) =>
@@ -195,6 +245,31 @@ export const analyticsApi = {
     apiClient.get<AgentStat[]>('/api/v1/analytics/agents'),
   myStats: () =>
     apiClient.get<MyStats>('/api/v1/analytics/my-stats'),
+}
+
+export interface FlowParams {
+  page?: number
+  page_size?: number
+  kind?: string
+  importance?: string
+  status?: string
+  search?: string
+  requires_attention?: boolean
+}
+
+export const flowApi = {
+  listSignals: (params: FlowParams = {}) =>
+    apiClient.get<PaginatedResponse<FlowSignal>>('/api/v1/flow/signals', { params }),
+  getSignal: (id: number) =>
+    apiClient.get<FlowSignal>(`/api/v1/flow/signals/${id}`),
+  listCases: (params: FlowParams = {}) =>
+    apiClient.get<PaginatedResponse<FlowCase>>('/api/v1/flow/cases', { params }),
+  getCase: (id: number) =>
+    apiClient.get<FlowCase>(`/api/v1/flow/cases/${id}`),
+  changeCaseStatus: (id: number, status: string) =>
+    apiClient.patch(`/api/v1/flow/cases/${id}/status`, { status }),
+  digestOverview: () =>
+    apiClient.get<DigestOverview>('/api/v1/flow/digests/overview'),
 }
 
 export const departmentsApi = {

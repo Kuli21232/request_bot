@@ -27,7 +27,9 @@ api.interceptors.response.use(
           error.config.headers.Authorization = `Bearer ${token}`
           return axios(error.config)
         }
-      } catch { localStorage.removeItem('jwt_token') }
+      } catch {
+        localStorage.removeItem('jwt_token')
+      }
     }
     return Promise.reject(error)
   }
@@ -117,14 +119,83 @@ export interface VolumePoint {
   count: number
 }
 
-// ── Auth ──────────────────────────────────────────────────────
+export interface PaginatedResponse<T> {
+  items: T[]
+  total: number
+  page: number
+  page_size: number
+}
+
+export interface FlowSignal {
+  id: number
+  kind: string
+  importance: string
+  actionability: string
+  summary?: string
+  body: string
+  store?: string
+  topic_label?: string
+  case_key?: string
+  recommended_action?: string
+  has_media: boolean
+  requires_attention: boolean
+  is_noise: boolean
+  digest_bucket?: string
+  ai_confidence?: number
+  case_id?: number
+  case_title?: string
+  department_id?: number
+  department_name?: string
+  request_id?: number
+  request_ticket?: string
+  submitter_id?: number
+  submitter_name?: string
+  source_topic_id?: number
+  source_message_id?: number
+  source_chat_id?: number
+  happened_at: string
+}
+
+export interface FlowSignalDetail extends FlowSignal {
+  attachments?: any[]
+  entities?: Record<string, any>
+  ai_labels?: Record<string, any>
+  media_flags?: Record<string, any>
+}
+
+export interface FlowCase {
+  id: number
+  title: string
+  summary?: string
+  status: string
+  priority: string
+  kind: string
+  signal_count: number
+  media_count: number
+  is_critical: boolean
+  stores_affected: string[]
+  recommended_action?: string
+  ai_confidence?: number
+  department_id?: number
+  department_name?: string
+  request_id?: number
+  request_ticket?: string
+  last_signal_at?: string
+  updated_at?: string
+}
+
+export interface FlowCaseDetail extends FlowCase {
+  owners?: string[]
+  ai_labels?: Record<string, any>
+  signals?: FlowSignal[]
+}
+
 export const authTelegram = async (initData: string): Promise<{ access_token: string }> => {
   const res = await axios.post(`${API_URL}/api/v1/auth/telegram`, { init_data: initData })
   const token = res.data.access_token ?? res.data.token
   return { access_token: token }
 }
 
-// ── Requests ──────────────────────────────────────────────────
 export const getRequests = async (params?: Record<string, string | number>) => {
   const res = await api.get('/api/v1/requests', { params })
   return res.data
@@ -170,7 +241,6 @@ export const getHistory = async (id: number): Promise<HistoryItem[]> => {
   return res.data
 }
 
-// ── Analytics ─────────────────────────────────────────────────
 export const getMyStats = async (): Promise<Stats> => {
   const res = await api.get('/api/v1/analytics/my-stats')
   return res.data
@@ -196,7 +266,31 @@ export const getSlaStats = async () => {
   return res.data
 }
 
-// ── Departments & Users ────────────────────────────────────────
+export const getSignals = async (params?: Record<string, string | number | boolean>) => {
+  const res = await api.get<PaginatedResponse<FlowSignal>>('/api/v1/flow/signals', { params })
+  return res.data
+}
+
+export const getSignal = async (id: number): Promise<FlowSignalDetail> => {
+  const res = await api.get(`/api/v1/flow/signals/${id}`)
+  return res.data
+}
+
+export const getCases = async (params?: Record<string, string | number | boolean>) => {
+  const res = await api.get<PaginatedResponse<FlowCase>>('/api/v1/flow/cases', { params })
+  return res.data
+}
+
+export const getCase = async (id: number): Promise<FlowCaseDetail> => {
+  const res = await api.get(`/api/v1/flow/cases/${id}`)
+  return res.data
+}
+
+export const getDigestOverview = async () => {
+  const res = await api.get('/api/v1/flow/digests/overview')
+  return res.data
+}
+
 export const getDepartments = async (): Promise<Department[]> => {
   const res = await api.get('/api/v1/departments')
   return res.data

@@ -3,6 +3,8 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { Layout } from './components/Layout'
 import { Login } from './pages/Login'
 import { Dashboard } from './pages/Dashboard'
+import { Signals } from './pages/Signals'
+import { Cases } from './pages/Cases'
 import { Requests } from './pages/Requests'
 import { RequestDetail } from './pages/RequestDetail'
 import { Analytics } from './pages/Analytics'
@@ -13,28 +15,16 @@ import { Loader } from './components/Loader'
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth()
 
-  if (isLoading) {
-    return <Loader fullPage />
-  }
-
-  if (!user) {
-    return <Navigate to="/login" replace />
-  }
-
+  if (isLoading) return <Loader fullPage />
+  if (!user) return <Navigate to="/login" replace />
   return <>{children}</>
 }
 
 function PublicRoute({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth()
 
-  if (isLoading) {
-    return <Loader fullPage />
-  }
-
-  if (user) {
-    return <Navigate to="/" replace />
-  }
-
+  if (isLoading) return <Loader fullPage />
+  if (user) return <Navigate to="/" replace />
   return <>{children}</>
 }
 
@@ -58,6 +48,8 @@ function AppRoutes() {
         }
       >
         <Route index element={<Dashboard />} />
+        <Route path="signals" element={<Signals />} />
+        <Route path="cases" element={<Cases />} />
         <Route path="requests" element={<Requests />} />
         <Route path="requests/:id" element={<RequestDetail />} />
         <Route path="analytics" element={<Analytics />} />

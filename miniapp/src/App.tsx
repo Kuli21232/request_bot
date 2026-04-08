@@ -5,6 +5,10 @@ import { authTelegram } from './api/client'
 import { BottomNav } from './components/BottomNav'
 import { Loader } from './components/Loader'
 import Dashboard from './pages/Dashboard'
+import Signals from './pages/Signals'
+import SignalDetail from './pages/SignalDetail'
+import Cases from './pages/Cases'
+import CaseDetail from './pages/CaseDetail'
 import RequestList from './pages/RequestList'
 import RequestDetail from './pages/RequestDetail'
 import MyRequests from './pages/MyRequests'
@@ -12,15 +16,17 @@ import './index.css'
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: string }> {
   state = { error: '' }
+
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error('ErrorBoundary caught:', error, info)
     this.setState({ error: `${error.name}: ${error.message}\n\n${info.componentStack?.slice(0, 300)}` })
   }
+
   render() {
     if (this.state.error) {
       return (
         <div style={{ padding: 16, fontFamily: 'monospace', fontSize: 12, color: '#ff4444', background: '#1a1a1a', minHeight: '100vh', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-          <div style={{ color: '#ff8888', fontSize: 14, fontWeight: 'bold', marginBottom: 8 }}>❌ React Error</div>
+          <div style={{ color: '#ff8888', fontSize: 14, fontWeight: 'bold', marginBottom: 8 }}>React Error</div>
           {this.state.error}
         </div>
       )
@@ -40,13 +46,12 @@ export default function App() {
 
     const init = async () => {
       try {
-        // Если уже есть токен — сразу готово
         const existingToken = localStorage.getItem('jwt_token')
         if (existingToken && existingToken !== 'undefined' && existingToken !== 'null') {
           setReady(true)
           return
         }
-        // Очищаем плохие токены
+
         localStorage.removeItem('jwt_token')
 
         const initData = WebApp.initData
@@ -57,9 +62,7 @@ export default function App() {
         }
 
         const { access_token } = await authTelegram(initData)
-        if (!access_token) {
-          throw new Error('No token in response')
-        }
+        if (!access_token) throw new Error('No token in response')
         localStorage.setItem('jwt_token', access_token)
         setReady(true)
       } catch (e: any) {
@@ -93,11 +96,15 @@ export default function App() {
         )}
         {debugInfo === 'browser-mode' && (
           <div style={{ background: '#fef3c7', color: '#92400e', fontSize: 12, textAlign: 'center', padding: '4px 16px' }}>
-            Открыто вне Telegram — авторизация недоступна
+            Открыто вне Telegram, авторизация недоступна
           </div>
         )}
         <Routes>
           <Route path="/" element={<Dashboard />} />
+          <Route path="/signals" element={<Signals />} />
+          <Route path="/signals/:id" element={<SignalDetail />} />
+          <Route path="/cases" element={<Cases />} />
+          <Route path="/cases/:id" element={<CaseDetail />} />
           <Route path="/requests" element={<RequestList />} />
           <Route path="/requests/:id" element={<RequestDetail />} />
           <Route path="/my" element={<MyRequests />} />
