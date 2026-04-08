@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { getRequests } from '../api/client'
-import type { Request } from '../api/client'
+import { getRequests, getDepartments } from '../api/client'
+import type { Request, Department } from '../api/client'
 import { StatusBadge, PriorityBadge, STATUS_DOT_COLOR } from '../components/StatusBadge'
 import { Loader } from '../components/Loader'
 import { haptic } from '../telegram'
@@ -34,6 +34,12 @@ export default function RequestList() {
   const [search, setSearch] = useState('')
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [debouncedSearch, setDebouncedSearch] = useState('')
+  const [departments, setDepartments] = useState<Department[]>([])
+  const [deptFilter, setDeptFilter] = useState<number | null>(null)
+
+  useEffect(() => {
+    getDepartments().then(setDepartments).catch(() => {})
+  }, [])
 
   const statusFilter = searchParams.get('status') ?? ''
   const slaFilter = searchParams.get('sla_breached') === 'true'
@@ -51,6 +57,7 @@ export default function RequestList() {
     if (slaFilter) params.sla_breached = 'true'
     if (assignedToMe) params.assigned_to_me = 'true'
     if (debouncedSearch) params.search = debouncedSearch
+    if (deptFilter) params.department_id = deptFilter
     return params
   }
 
@@ -61,7 +68,7 @@ export default function RequestList() {
       .then(d => { setRequests(d.items ?? []); setTotal(d.total ?? 0) })
       .catch(() => setRequests([]))
       .finally(() => setLoading(false))
-  }, [statusFilter, slaFilter, assignedToMe, debouncedSearch])
+  }, [statusFilter, slaFilter, assignedToMe, debouncedSearch, deptFilter])
 
   const loadMore = async () => {
     const nextPage = page + 1
@@ -112,8 +119,8 @@ export default function RequestList() {
           />
         </div>
 
-        {/* Filter chips */}
-        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 10 }} className="scrollbar-hide">
+        {/* Status filter chips */}
+        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 6 }} className="scrollbar-hide">
           {FILTERS.map(f => (
             <button key={f.key} onClick={() => setFilter(f.key)} style={{
               flexShrink: 0, padding: '5px 12px', borderRadius: 100, fontSize: 13, fontWeight: 500,
@@ -134,6 +141,30 @@ export default function RequestList() {
             </button>
           )}
         </div>
+
+        {/* Department filter chips */}
+        {departments.length > 0 && (
+          <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 10 }} className="scrollbar-hide">
+            <button onClick={() => { haptic.select(); setDeptFilter(null) }} style={{
+              flexShrink: 0, padding: '4px 11px', borderRadius: 100, fontSize: 12, fontWeight: 500,
+              border: 'none', cursor: 'pointer',
+              background: deptFilter === null ? '#0f766e' : 'var(--tg-theme-secondary-bg-color, #f0f0f0)',
+              color: deptFilter === null ? '#fff' : 'var(--tg-theme-hint-color, #999)',
+            }}>
+              Все отделы
+            </button>
+            {departments.map(d => (
+              <button key={d.id} onClick={() => { haptic.select(); setDeptFilter(d.id) }} style={{
+                flexShrink: 0, padding: '4px 11px', borderRadius: 100, fontSize: 12, fontWeight: 500,
+                border: 'none', cursor: 'pointer',
+                background: deptFilter === d.id ? '#0f766e' : 'var(--tg-theme-secondary-bg-color, #f0f0f0)',
+                color: deptFilter === d.id ? '#fff' : 'var(--tg-theme-hint-color, #999)',
+              }}>
+                {d.icon_emoji ? `${d.icon_emoji} ${d.name}` : d.name}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Count info */}
