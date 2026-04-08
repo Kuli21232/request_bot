@@ -1,4 +1,4 @@
-version: "3.9"
+name: request_bot
 
 services:
   postgres:
@@ -51,12 +51,19 @@ services:
       DATABASE_URL: postgresql+asyncpg://requestbot:${POSTGRES_PASSWORD}@postgres:5432/requestbot
       REDIS_URL: redis://redis:6379/0
       OLLAMA_BASE_URL: http://ollama:11434
+    expose:
+      - "${BOT_PORT:-8080}"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
     command: python -m bot.main
+    networks:
+      default:
+      shared_edge:
+        aliases:
+          - request-bot-bot
 
   api:
     build:
@@ -71,9 +78,21 @@ services:
         condition: service_healthy
     ports:
       - "127.0.0.1:8000:8000"
+    expose:
+      - "8000"
     command: uvicorn api.main:app --host 0.0.0.0 --port 8000 --workers 2
+    networks:
+      default:
+      shared_edge:
+        aliases:
+          - request-bot-api
 
 volumes:
   postgres_data:
   redis_data:
   ollama_data:
+
+networks:
+  shared_edge:
+    external: true
+    name: sites_shared
