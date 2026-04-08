@@ -3,7 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.config import api_settings
-from api.routers import auth, requests, analytics, departments, users
+from api.routers import auth, requests, analytics, departments, users, flow
 
 app = FastAPI(
     title="RequestBot API",
@@ -24,6 +24,7 @@ app.include_router(requests.router)
 app.include_router(analytics.router)
 app.include_router(departments.router)
 app.include_router(users.router)
+app.include_router(flow.router)
 
 
 @app.get("/health")

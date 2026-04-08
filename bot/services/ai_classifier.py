@@ -1,4 +1,4 @@
-"""AI-классификация через локальный Ollama (бесплатно)."""
+"""AI-классификация сигналов через локальный Ollama."""
 import json
 import logging
 import aiohttp
@@ -7,15 +7,30 @@ from bot.config import settings
 
 logger = logging.getLogger(__name__)
 
-CLASSIFY_PROMPT = """Проанализируй текст заявки и верни JSON со следующими полями:
-- subject: краткая тема (до 10 слов)
-- category: категория (IT, HR, Финансы, Документы, Оборудование, Другое)
-- sentiment: тональность (neutral, frustrated, urgent, positive)
-- priority_suggestion: предложение по приоритету (low, normal, high, critical)
+CLASSIFY_PROMPT = """Проанализируй сообщение из операционного чата и верни JSON.
 
-Верни ТОЛЬКО JSON, без пояснений.
+Нужно понять это не как тикет, а как сигнал инфопотока.
 
-Заявка:
+Верни ТОЛЬКО JSON со следующими полями:
+- signal_type: one of [problem, request, status_update, photo_report, delivery, finance, compliance, inventory, chat/noise, escalation, news]
+- summary: краткая выжимка до 12 слов
+- importance: one of [low, normal, high, critical]
+- action_needed: one of [ignore, digest_only, attach_to_case, create_case, suggest_escalation, suggest_reply, route_to_topic]
+- store: магазин, точка или филиал если можно извлечь, иначе null
+- topic_label: короткая тема кейса
+- entities: JSON object с произвольными сущностями, например product, people, issue, deadline
+- case_key: короткий стабильный ключ для объединения похожих сообщений
+- recommended_action: краткая рекомендация для оператора
+- tags: массив коротких тегов
+- confidence: число от 0 до 1
+
+Правила:
+- Фото/видео отчёт без явной проблемы обычно photo_report + digest_only.
+- Болтовня, уточнения без действия и шум обычно chat/noise + ignore/digest_only.
+- ЕГАИС, финансы, газ, поставки, не бьется товар, поломки, критичные остатки — это не noise.
+- Если есть явная повторяющаяся проблема или нужен разбор, выбирай attach_to_case/create_case.
+
+Сообщение:
 """
 
 
@@ -48,7 +63,17 @@ class AIClassifier:
                         return None
                     data = await resp.json()
                     raw = data.get("response", "")
-                    return json.loads(raw)
+                    parsed = json.loads(raw)
+                    parsed.setdefault("signal_type", "request")
+                    if parsed.get("signal_type") == "chat_noise":
+                        parsed["signal_type"] = "chat/noise"
+                    parsed.setdefault("summary", text[:120])
+                    parsed.setdefault("importance", "normal")
+                    parsed.setdefault("action_needed", "digest_only")
+                    parsed.setdefault("entities", {})
+                    parsed.setdefault("tags", [])
+                    parsed.setdefault("confidence", 0.5)
+                    return parsed
         except (aiohttp.ClientError, json.JSONDecodeError, Exception) as e:
             logger.warning("AI-классификация недоступна: %s", e)
             return None
