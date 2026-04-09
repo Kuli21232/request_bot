@@ -26,6 +26,9 @@ async def set_commands(bot: Bot) -> None:
         [
             BotCommand(command="start", description="Запуск бота"),
             BotCommand(command="help", description="Список команд"),
+            BotCommand(command="assistant", description="AI-помощник по потоку"),
+            BotCommand(command="digest", description="AI-сводка по теме или группе"),
+            BotCommand(command="next", description="Что сейчас в приоритете"),
             BotCommand(command="ask", description="Задать вопрос по базе знаний"),
             BotCommand(command="guide", description="Найти инструкцию"),
             BotCommand(command="participants", description="Участники системы"),

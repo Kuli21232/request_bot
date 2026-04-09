@@ -15,6 +15,7 @@ from bot.database.repositories.knowledge_repo import KnowledgeRepository
 from bot.database.repositories.request_repo import RequestRepository
 from bot.database.repositories.topic_repo import TopicRepository
 from bot.database.repositories.user_repo import UserRepository
+from bot.services.assistant_service import AssistantService
 from bot.services.guidance_service import GuidanceService
 from bot.services.notification_service import NotificationService
 from bot.services.topic_ai_engine import TopicAIEngine
@@ -100,6 +101,9 @@ async def cmd_start(message: Message, db_user: User | None) -> None:
         f"Привет, {escape(name)}!\n\n"
         "Я бот для разбора операционного потока, инструкций и профилей сотрудников.\n\n"
         "Главное:\n"
+        "/assistant <запрос> — AI-помощник по топикам, сводкам и приоритетам\n"
+        "/digest [тема] — сводка по группе или теме\n"
+        "/next — что сейчас в приоритете\n"
         "/ask <вопрос> — ответ по базе знаний\n"
         "/guide <тема> — найти инструкцию\n"
         "/participants [поиск] — участники системы\n"
@@ -116,6 +120,9 @@ async def cmd_start(message: Message, db_user: User | None) -> None:
 async def cmd_help(message: Message, db_user: User | None) -> None:
     lines = [
         "<b>Основные команды</b>",
+        "/assistant &lt;запрос&gt; — AI-помощник по топикам, сводкам и приоритетам",
+        "/digest [тема] — сводка по группе, топику или общему потоку",
+        "/next — что сейчас стоит разбирать в первую очередь",
         "/ask &lt;вопрос&gt; — ответ по базе знаний",
         "/guide &lt;тема&gt; — найти инструкцию или памятку",
         "/participants [поиск] — список известных участников",
@@ -178,6 +185,69 @@ async def cmd_guide(message: Message, db_user: User | None) -> None:
         lines.append("\nНа основе материалов:")
         lines.extend(f"• {escape(source['title'])}" for source in answer["sources"])
     await message.reply("\n".join(lines), parse_mode="HTML")
+
+
+@router.message(Command("assistant"))
+async def cmd_assistant(message: Message, db_user: User | None) -> None:
+    if not _is_staff(db_user):
+        await message.reply("AI-помощник по операционному потоку доступен исполнителям и руководителям.")
+        return
+
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) < 2:
+        await message.reply(
+            "Напишите запрос после команды, например:\n"
+            "/assistant сделай сводку по доставке\n"
+            "/assistant что сейчас в приоритете\n"
+            "/assistant что происходит в этой группе"
+        )
+        return
+
+    async with AsyncSessionLocal() as session:
+        service = AssistantService(session)
+        result = await service.answer(
+            parts[1],
+            current_chat_id=(message.chat.id if message.chat.type == "supergroup" else None),
+        )
+
+    await message.reply(escape(result.answer), parse_mode="HTML")
+
+
+@router.message(Command("digest"))
+async def cmd_digest(message: Message, db_user: User | None) -> None:
+    if not _is_staff(db_user):
+        await message.reply("Сводки по потоку доступны исполнителям и руководителям.")
+        return
+
+    parts = (message.text or "").split(maxsplit=1)
+    prompt = parts[1] if len(parts) > 1 else "сделай сводку по текущей группе"
+    if message.chat.type != "supergroup" and len(parts) == 1:
+        prompt = "сделай общую сводку по потоку"
+
+    async with AsyncSessionLocal() as session:
+        service = AssistantService(session)
+        result = await service.answer(
+            prompt,
+            current_chat_id=(message.chat.id if message.chat.type == "supergroup" else None),
+        )
+
+    await message.reply(escape(result.answer), parse_mode="HTML")
+
+
+@router.message(Command("next"))
+async def cmd_next(message: Message, db_user: User | None) -> None:
+    if not _is_staff(db_user):
+        await message.reply("Приоритеты по потоку доступны исполнителям и руководителям.")
+        return
+
+    async with AsyncSessionLocal() as session:
+        service = AssistantService(session)
+        result = await service.answer(
+            "что сейчас нужно сделать в первую очередь",
+            current_chat_id=(message.chat.id if message.chat.type == "supergroup" else None),
+        )
+
+    await message.reply(escape(result.answer), parse_mode="HTML")
 
 
 @router.message(Command("participants"))
