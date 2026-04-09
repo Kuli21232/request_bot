@@ -70,6 +70,11 @@ class FlowRepository:
     ) -> list[FlowCase]:
         result = await self.session.execute(
             select(FlowCase)
+            .options(
+                selectinload(FlowCase.department),
+                selectinload(FlowCase.primary_topic),
+                selectinload(FlowCase.request),
+            )
             .where(FlowCase.primary_topic_id == topic_id)
             .order_by(FlowCase.last_signal_at.desc().nullslast(), FlowCase.updated_at.desc())
             .limit(limit)
@@ -84,7 +89,17 @@ class FlowRepository:
         kind: str | None = None,
         requires_attention: bool | None = None,
     ) -> list[FlowSignal]:
-        query = select(FlowSignal).where(FlowSignal.topic_id == topic_id)
+        query = (
+            select(FlowSignal)
+            .options(
+                selectinload(FlowSignal.case),
+                selectinload(FlowSignal.department),
+                selectinload(FlowSignal.topic),
+                selectinload(FlowSignal.request),
+                selectinload(FlowSignal.submitter),
+            )
+            .where(FlowSignal.topic_id == topic_id)
+        )
         if kind:
             query = query.where(FlowSignal.kind == kind)
         if requires_attention is not None:
