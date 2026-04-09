@@ -328,6 +328,34 @@ export interface AdminUser {
   is_banned: boolean
   last_active_at?: string
   created_at?: string
+  notes_count?: number
+  notes?: ProfileNote[]
+  is_watching?: boolean
+  watchers_count?: number
+}
+
+export interface ProfileNote {
+  id: number
+  body: string
+  notify_target: boolean
+  author_id?: number
+  author_name?: string
+  created_at?: string
+}
+
+export interface KnowledgeArticle {
+  id: number
+  slug: string
+  title: string
+  summary?: string
+  body: string
+  tags: string[]
+  audience: string
+  is_published: boolean
+  created_by?: string
+  updated_by?: string
+  created_at?: string
+  updated_at?: string
 }
 
 export const usersApi = {
@@ -335,8 +363,25 @@ export const usersApi = {
     apiClient.get<AdminUser[]>('/api/v1/users', { params }),
   me: () =>
     apiClient.get<AdminUser>('/api/v1/users/me'),
+  get: (id: number) =>
+    apiClient.get<AdminUser>(`/api/v1/users/${id}`),
+  addNote: (id: number, body: string, notify_target = false) =>
+    apiClient.post<ProfileNote>(`/api/v1/users/${id}/notes`, { body, notify_target }),
+  watch: (id: number) =>
+    apiClient.post(`/api/v1/users/${id}/watch`),
+  unwatch: (id: number) =>
+    apiClient.delete(`/api/v1/users/${id}/watch`),
   updateRole: (id: number, role: string) =>
     apiClient.patch<AdminUser>(`/api/v1/users/${id}/role`, { role }),
   toggleBan: (id: number, is_banned: boolean) =>
     apiClient.patch<AdminUser>(`/api/v1/users/${id}/ban`, { is_banned }),
+}
+
+export const knowledgeApi = {
+  list: (params?: { search?: string; include_drafts?: boolean }) =>
+    apiClient.get<KnowledgeArticle[]>('/api/v1/knowledge', { params }),
+  create: (payload: Omit<KnowledgeArticle, 'id' | 'created_by' | 'updated_by' | 'created_at' | 'updated_at'>) =>
+    apiClient.post<KnowledgeArticle>('/api/v1/knowledge', payload),
+  update: (id: number, payload: Partial<KnowledgeArticle>) =>
+    apiClient.patch<KnowledgeArticle>(`/api/v1/knowledge/${id}`, payload),
 }

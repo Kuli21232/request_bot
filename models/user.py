@@ -51,3 +51,15 @@ class User(Base, TimestampMixin):
     department_memberships: Mapped[list["DepartmentAgent"]] = relationship(
         "DepartmentAgent", back_populates="agent"
     )
+    profile_notes: Mapped[list["UserProfileNote"]] = relationship(
+        "UserProfileNote", foreign_keys="UserProfileNote.target_user_id", back_populates="target_user"
+    )
+    authored_profile_notes: Mapped[list["UserProfileNote"]] = relationship(
+        "UserProfileNote", foreign_keys="UserProfileNote.author_id", back_populates="author"
+    )
+    profile_subscriptions: Mapped[list["UserProfileSubscription"]] = relationship(
+        "UserProfileSubscription", foreign_keys="UserProfileSubscription.watcher_user_id", back_populates="watcher"
+    )
+    profile_watchers: Mapped[list["UserProfileSubscription"]] = relationship(
+        "UserProfileSubscription", foreign_keys="UserProfileSubscription.target_user_id", back_populates="target_user"
+    )

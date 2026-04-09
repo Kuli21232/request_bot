@@ -1,6 +1,8 @@
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
+from models.knowledge import UserProfileNote, UserProfileSubscription
 from models.user import User
 from models.enums import UserRole
 
@@ -17,7 +19,12 @@ class UserRepository:
 
     async def get_by_id(self, user_id: int) -> User | None:
         result = await self.session.execute(
-            select(User).where(User.id == user_id)
+            select(User)
+            .options(
+                selectinload(User.profile_notes).selectinload(UserProfileNote.author),
+                selectinload(User.profile_watchers).selectinload(UserProfileSubscription.watcher),
+            )
+            .where(User.id == user_id)
         )
         return result.scalar_one_or_none()
 
@@ -26,6 +33,36 @@ class UserRepository:
             select(User).where(User.email == email)
         )
         return result.scalar_one_or_none()
+
+    async def search_users(self, query: str | None = None, *, limit: int = 20) -> list[User]:
+        stmt = select(User).where(User.is_banned == False)
+        if query:
+            cleaned = query.replace("@", "").strip()
+            pattern = f"%{cleaned}%"
+            if cleaned.isdigit():
+                numeric = int(cleaned)
+                stmt = stmt.where(
+                    or_(
+                        User.id == numeric,
+                        User.telegram_user_id == numeric,
+                        User.first_name.ilike(pattern),
+                        User.last_name.ilike(pattern),
+                        User.username.ilike(pattern),
+                        User.email.ilike(pattern),
+                    )
+                )
+            else:
+                stmt = stmt.where(
+                    or_(
+                        User.first_name.ilike(pattern),
+                        User.last_name.ilike(pattern),
+                        User.username.ilike(pattern),
+                        User.email.ilike(pattern),
+                    )
+                )
+        stmt = stmt.order_by(User.first_name, User.last_name).limit(limit)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
 
     async def upsert_telegram_user(
         self,

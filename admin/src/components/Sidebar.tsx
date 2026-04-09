@@ -1,16 +1,17 @@
 import { NavLink } from 'react-router-dom'
 import {
-  LayoutDashboard,
-  Network,
-  Radio,
-  FolderKanban,
-  MessageSquare,
   BarChart2,
-  Users,
+  BookOpen,
+  Bot,
   Building2,
   ChevronLeft,
   ChevronRight,
-  Bot,
+  FolderKanban,
+  LayoutDashboard,
+  MessageSquare,
+  Network,
+  Radio,
+  Users,
 } from 'lucide-react'
 
 interface SidebarProps {
@@ -20,13 +21,14 @@ interface SidebarProps {
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Панель' },
-  { to: '/topics', icon: Network, label: 'Топики' },
-  { to: '/signals', icon: Radio, label: 'Сигналы' },
-  { to: '/cases', icon: FolderKanban, label: 'Кейсы' },
-  { to: '/requests', icon: MessageSquare, label: 'Заявки' },
+  { to: '/topics', icon: Network, label: 'Темы' },
+  { to: '/signals', icon: Radio, label: 'Поток' },
+  { to: '/cases', icon: FolderKanban, label: 'Ситуации' },
+  { to: '/requests', icon: MessageSquare, label: 'Задачи' },
   { to: '/analytics', icon: BarChart2, label: 'Аналитика' },
   { to: '/departments', icon: Building2, label: 'Отделы' },
-  { to: '/users', icon: Users, label: 'Пользователи' },
+  { to: '/users', icon: Users, label: 'Люди' },
+  { to: '/knowledge', icon: BookOpen, label: 'Знания' },
 ]
 
 export function Sidebar({ collapsed, onToggle }: SidebarProps) {

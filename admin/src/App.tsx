@@ -11,6 +11,7 @@ import { RequestDetail } from './pages/RequestDetail'
 import { Analytics } from './pages/Analytics'
 import { Departments } from './pages/Departments'
 import { Users } from './pages/Users'
+import { Knowledge } from './pages/Knowledge'
 import { Loader } from './components/Loader'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -57,6 +58,7 @@ function AppRoutes() {
         <Route path="analytics" element={<Analytics />} />
         <Route path="departments" element={<Departments />} />
         <Route path="users" element={<Users />} />
+        <Route path="knowledge" element={<Knowledge />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
