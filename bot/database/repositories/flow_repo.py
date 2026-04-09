@@ -76,6 +76,20 @@ class FlowRepository:
         )
         return list(result.scalars().all())
 
+    async def list_topic_signal_briefs(
+        self,
+        *,
+        topic_id: int,
+        limit: int = 5,
+    ) -> list[FlowSignal]:
+        result = await self.session.execute(
+            select(FlowSignal)
+            .where(FlowSignal.topic_id == topic_id)
+            .order_by(FlowSignal.happened_at.desc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
     async def find_case_candidates(
         self,
         *,
