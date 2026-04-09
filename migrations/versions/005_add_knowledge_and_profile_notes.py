@@ -1,7 +1,7 @@
 """add knowledge articles and user profile notes
 
-Revision ID: 005_add_knowledge_and_profile_notes
-Revises: 004_backfill_topics_from_departments
+Revision ID: 005
+Revises: 004
 Create Date: 2026-04-09
 """
 
@@ -10,8 +10,8 @@ import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
 
-revision = "005_add_knowledge_and_profile_notes"
-down_revision = "004_backfill_topics_from_departments"
+revision = "005"
+down_revision = "004"
 branch_labels = None
 depends_on = None
 
