@@ -1,16 +1,17 @@
 import logging
 
+from bot.config import settings
 from bot.database.repositories.knowledge_repo import KnowledgeRepository
 from bot.services.llm_service import LLMService
 
 logger = logging.getLogger(__name__)
 
 ASSISTANT_SYSTEM_PROMPT = (
-    "Ты живой операционный AI-ассистент BeerShop. "
-    "Отвечай естественно, по-человечески и полезно. "
-    "Не перечисляй сырые куски базы знаний, а сначала подумай и собери нормальный ответ. "
-    "Если информации мало, честно скажи об этом и предложи следующий шаг. "
-    "Пиши по-русски, короткими абзацами, без канцелярита."
+    "You are the BeerShop operations assistant. "
+    "Answer naturally, clearly, and helpfully. "
+    "Use the knowledge context when it exists, but do not quote raw fragments. "
+    "If context is weak, still give the best practical answer and clearly state uncertainty. "
+    "Always answer in Russian."
 )
 
 
@@ -36,8 +37,9 @@ class GuidanceService:
         if not top_articles:
             return {
                 "answer": (
-                    "Пока не нашел уверенного ответа в базе знаний и AI сейчас недоступен. "
-                    "Лучше уточнить вопрос или добавить нужную инструкцию в базу знаний."
+                    "Я пока не нашел точной инструкции по этому вопросу. "
+                    "Могу подсказать общий порядок действий, если вы уточните тему, "
+                    "или можно добавить нужную инструкцию в базу знаний."
                 ),
                 "sources": [],
                 "generated": False,
@@ -56,39 +58,52 @@ class GuidanceService:
 
     async def _generate_with_ai(self, question: str, articles: list, *, mode: str) -> str | None:
         context = "\n\n".join(
-            f"[{article.title}]\nКратко: {article.summary or 'без краткого описания'}\nСодержание:\n{article.body[:2200]}"
+            f"[{article.title}]\nSummary: {article.summary or 'none'}\nBody:\n{article.body[:1800]}"
             for article in articles
         )
 
         if mode == "guide":
             task = (
-                "Собери понятный инструктаж по запросу пользователя. "
-                "Если в контексте есть релевантные материалы, преврати их в понятную пошаговую инструкцию. "
-                "Если материалов мало, все равно дай лучший практический ответ и отдельно коротко скажи, чего не хватает. "
-                "Структура ответа: 1) что делать, 2) шаги, 3) на что обратить внимание."
+                "Prepare a short step-by-step instruction. "
+                "Structure the answer as: what to do, steps, what to watch out for. "
+                "If there is not enough context, still give the best practical guidance."
             )
         else:
             task = (
-                "Ответь на вопрос пользователя как сильный рабочий ассистент. "
-                "Не копируй статьи дословно, а синтезируй ответ своими словами. "
-                "Если контекста мало, честно отметь это, но все равно дай лучший практический ориентир."
+                "Answer the employee question like a strong workplace assistant. "
+                "Be direct, practical, and easy to understand. "
+                "If the exact policy is unknown, say that honestly and give the best next step."
             )
 
         prompt = (
             f"{task}\n\n"
-            f"Вопрос пользователя:\n{question}\n\n"
-            f"Контекст базы знаний:\n{context if context else 'Контекст не найден.'}\n\n"
-            "Сделай ответ живым, понятным и полезным для обычного сотрудника. "
-            "Не пиши 'по данным контекста' или 'источники сообщают'. "
-            "Если уместно, заверши коротким следующим шагом."
+            f"User question:\n{question}\n\n"
+            f"Knowledge context:\n{context if context else 'No matching knowledge articles were found.'}\n\n"
+            "Respond in Russian. Keep it compact and useful. "
+            "Do not mention 'context' or 'sources' in the wording."
         )
 
-        return await self.llm.generate_text(
+        generated = await self.llm.generate_text(
             system=ASSISTANT_SYSTEM_PROMPT,
             prompt=prompt,
-            temperature=0.45 if mode == "guide" else 0.35,
-            timeout=16,
-            max_tokens=220 if mode == "guide" else 180,
+            temperature=0.35 if mode == "answer" else 0.45,
+            timeout=max(20, settings.OLLAMA_BACKGROUND_TIMEOUT - 2),
+            max_tokens=120 if mode == "answer" else 160,
+        )
+        if generated:
+            return generated
+
+        retry_prompt = (
+            "Answer in Russian in 2-4 short sentences.\n"
+            f"Question: {question}\n"
+            "If the exact instruction is unknown, say that directly and suggest the next action."
+        )
+        return await self.llm.generate_text(
+            system="You are a concise operations assistant. Always answer in Russian.",
+            prompt=retry_prompt,
+            temperature=0.2,
+            timeout=settings.OLLAMA_BACKGROUND_TIMEOUT,
+            max_tokens=90,
         )
 
     @staticmethod
