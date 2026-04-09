@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+import re
 
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -108,6 +109,54 @@ class TopicRepository:
             query = query.where(TelegramTopic.group_id == group_id)
         result = await self.session.execute(query)
         return list(result.scalars().all())
+
+    async def search_relevant_topics(self, text: str, *, limit: int = 5) -> list[TelegramTopic]:
+        topics = await self.list_topics()
+        if not text:
+            return []
+
+        normalized_text = self._normalize_text(text)
+        query_words = self._split_words(normalized_text)
+        ranked: list[tuple[int, datetime | None, TelegramTopic]] = []
+
+        for topic in topics:
+            if not topic.is_active:
+                continue
+
+            title_normalized = self._normalize_text(topic.title)
+            title_words = self._split_words(title_normalized)
+            score = 0
+
+            if title_normalized and title_normalized in normalized_text:
+                score += 12
+            overlap = len(query_words & title_words)
+            score += overlap * 4
+
+            profile_summary = self._normalize_text((topic.profile.profile_summary if topic.profile else "") or "")
+            if profile_summary:
+                summary_words = self._split_words(profile_summary)
+                score += len(query_words & summary_words)
+
+            top_tags = []
+            if topic.profile and topic.profile.learning_snapshot:
+                top_tags = list(dict(topic.profile.learning_snapshot).get("tag_counts", {}).keys())
+            for tag in top_tags[:6]:
+                if self._normalize_text(tag) in normalized_text:
+                    score += 2
+
+            if score > 0:
+                ranked.append((score, topic.last_seen_at or topic.last_message_at, topic))
+
+        ranked.sort(key=lambda item: (item[0], item[1] or datetime.min.replace(tzinfo=timezone.utc)), reverse=True)
+        return [item[2] for item in ranked[:limit]]
+
+    @staticmethod
+    def _normalize_text(text: str) -> str:
+        return " ".join(text.lower().replace("ё", "е").split())
+
+    @staticmethod
+    def _split_words(text: str) -> set[str]:
+        return {word for word in re.findall(r"[a-zA-Zа-яА-Я0-9]+", text) if len(word) >= 3}
 
     async def get_topic(self, topic_id: int) -> TelegramTopic | None:
         result = await self.session.execute(
