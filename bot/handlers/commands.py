@@ -1,4 +1,5 @@
 """Bot commands."""
+from html import escape
 import logging
 
 from aiogram import Bot, F, Router
@@ -6,6 +7,7 @@ from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message
+from sqlalchemy import select
 
 from bot.database import AsyncSessionLocal
 from bot.database.repositories.department_repo import DepartmentRepository
@@ -15,7 +17,11 @@ from bot.database.repositories.topic_repo import TopicRepository
 from bot.database.repositories.user_repo import UserRepository
 from bot.services.guidance_service import GuidanceService
 from bot.services.notification_service import NotificationService
+from bot.services.topic_ai_engine import TopicAIEngine
 from models.enums import UserRole
+from models.request import Request
+from models.telegram_group import TelegramGroup
+from models.topic import TelegramTopic
 from models.user import User
 
 logger = logging.getLogger(__name__)
@@ -40,53 +46,105 @@ async def _resolve_user(query: str, session) -> User | None:
 
 def _format_user_line(user: User) -> str:
     role = user.role.value
-    username = f"@{user.username}" if user.username else "без username"
-    return f"• <b>{user.first_name} {user.last_name or ''}</b> — {username}, роль: {role}"
+    username = f"@{escape(user.username)}" if user.username else "без username"
+    full_name = " ".join(part for part in [user.first_name, user.last_name] if part).strip()
+    return f"• <b>{escape(full_name or 'Без имени')}</b> — {username}, роль: {escape(role)}"
+
+
+def _priority_badge(priority: str) -> str:
+    return {
+        "critical": "🔴",
+        "high": "🟠",
+        "normal": "🟡",
+        "low": "🟢",
+    }.get(priority, "⚪")
+
+
+def _topic_badge(topic: TelegramTopic) -> str:
+    return topic.icon_emoji or "•"
+
+
+def _shorten(text: str | None, *, limit: int = 120) -> str:
+    if not text:
+        return "—"
+    value = " ".join(text.split())
+    if len(value) <= limit:
+        return value
+    return f"{value[: limit - 1]}…"
+
+
+def _format_topic_rank_line(item: dict, index: int) -> str:
+    topic: TelegramTopic = item["topic"]
+    metrics = item["metrics"]
+    reasons = ", ".join(item["reasons"][:2]) if item["reasons"] else "стабильный поток"
+    dominant_signal = item["dominant_signal_type"] or "mixed"
+    return (
+        f"{index}. {_priority_badge(item['priority'])} {_topic_badge(topic)} <b>{escape(topic.title)}</b>\n"
+        f"тип: {escape(topic.topic_kind or 'mixed')} / AI: {escape(dominant_signal)}\n"
+        f"сигналы: {metrics['signal_count']}, внимание: {metrics['attention_count']}, "
+        f"ситуации: {metrics['open_case_count']} открыто / {metrics['critical_case_count']} критично\n"
+        f"почему выше: {escape(reasons)}"
+    )
+
+
+def _rank_group_topics(group: TelegramGroup, metrics: dict[int, dict]) -> list[dict]:
+    engine = TopicAIEngine()
+    topics = [topic for topic in group.topics if topic.is_active]
+    return engine.sort_topics(topics, metrics)
 
 
 @router.message(CommandStart())
 async def cmd_start(message: Message, db_user: User | None) -> None:
     name = db_user.first_name if db_user else message.from_user.first_name
     await message.answer(
-        f"Привет, {name}!\n\n"
-        "Я бот для разбора операционного потока, ответов на рабочие вопросы и профилей сотрудников.\n\n"
-        "Что умею:\n"
-        "/ask <вопрос> — ответить по базе знаний\n"
+        f"Привет, {escape(name)}!\n\n"
+        "Я бот для разбора операционного потока, инструкций и профилей сотрудников.\n\n"
+        "Главное:\n"
+        "/ask <вопрос> — ответ по базе знаний\n"
         "/guide <тема> — найти инструкцию\n"
-        "/participants [поиск] — показать известных участников\n"
-        "/profile <id|@username|имя> — открыть профиль сотрудника\n"
-        "/watch <сотрудник> — подписаться на обновления профиля\n"
+        "/participants [поиск] — участники системы\n"
+        "/profile <id|@username|имя> — профиль сотрудника\n"
+        "/groups — обзор групп и самых важных топиков\n"
+        "/topics — AI-ранжирование топиков\n"
         "/my — мои задачи\n"
-        "/help — полный список команд"
+        "/help — полный список команд",
+        parse_mode="HTML",
     )
 
 
 @router.message(Command("help"))
 async def cmd_help(message: Message, db_user: User | None) -> None:
-    staff_block = (
-        "\nДля исполнителей и руководителей:\n"
-        "/note <сотрудник> | <текст> — оставить заметку в профиле\n"
-        "/list_topics — показать обнаруженные топики\n"
-        "/register_topic — привязать топик к отделу для shadow tasks\n"
-    ) if _is_staff(db_user) else ""
+    lines = [
+        "<b>Основные команды</b>",
+        "/ask &lt;вопрос&gt; — ответ по базе знаний",
+        "/guide &lt;тема&gt; — найти инструкцию или памятку",
+        "/participants [поиск] — список известных участников",
+        "/profile &lt;id|@username|имя&gt; — профиль сотрудника",
+        "/watch &lt;сотрудник&gt; — подписаться на обновления профиля",
+        "/unwatch &lt;сотрудник&gt; — убрать подписку",
+        "/groups — обзор всех групп и AI-приоритетов",
+        "/topics — AI-отсортированные топики",
+        "/status &lt;номер&gt; — статус legacy-задачи",
+        "/my — мои задачи",
+    ]
 
-    await message.answer(
-        "Основные команды:\n"
-        "/ask <вопрос> — ответ по базе знаний\n"
-        "/guide <тема> — найти инструкцию или памятку\n"
-        "/participants [поиск] — список известных участников\n"
-        "/profile <id|@username|имя> — профиль сотрудника\n"
-        "/watch <сотрудник> — подписаться на уведомления по профилю\n"
-        "/unwatch <сотрудник> — убрать подписку\n"
-        "/status <номер> — статус legacy-задачи\n"
-        "/my — мои задачи\n"
-        f"{staff_block}"
-    )
+    if _is_staff(db_user):
+        lines.extend(
+            [
+                "",
+                "<b>Для исполнителей и руководителей</b>",
+                "/note &lt;сотрудник&gt; | &lt;текст&gt; — заметка в профиль",
+                "/list_topics — обнаруженные топики в текущей группе",
+                "/register_topic — привязать топик к отделу для shadow tasks",
+            ]
+        )
+
+    await message.answer("\n".join(lines), parse_mode="HTML")
 
 
 @router.message(Command("ask"))
 async def cmd_ask(message: Message, db_user: User | None) -> None:
-    parts = message.text.split(maxsplit=1)
+    parts = (message.text or "").split(maxsplit=1)
     if len(parts) < 2:
         await message.reply("Напишите вопрос после команды, например: /ask как работает бот")
         return
@@ -99,13 +157,13 @@ async def cmd_ask(message: Message, db_user: User | None) -> None:
     lines = [answer["answer"]]
     if answer["sources"]:
         lines.append("\nИсточники:")
-        lines.extend(f"• {source['title']}" for source in answer["sources"])
-    await message.reply("\n".join(lines))
+        lines.extend(f"• {escape(source['title'])}" for source in answer["sources"])
+    await message.reply("\n".join(lines), parse_mode="HTML")
 
 
 @router.message(Command("guide"))
 async def cmd_guide(message: Message, db_user: User | None) -> None:
-    parts = message.text.split(maxsplit=1)
+    parts = (message.text or "").split(maxsplit=1)
     if len(parts) < 2:
         await message.reply("Укажите тему, например: /guide профили сотрудников")
         return
@@ -116,14 +174,15 @@ async def cmd_guide(message: Message, db_user: User | None) -> None:
             published_only=True,
             search=parts[1],
         )
+
     if not articles:
         await message.reply("По этой теме пока нет инструкции в базе знаний.")
         return
 
     top = articles[:5]
-    lines = ["Нашел подходящие инструкции:\n"]
+    lines = ["Нашел подходящие инструкции:"]
     for article in top:
-        lines.append(f"• <b>{article.title}</b>\n{(article.summary or article.body)[:180]}")
+        lines.append(f"• <b>{escape(article.title)}</b>\n{escape(_shorten(article.summary or article.body, limit=180))}")
     await message.reply("\n\n".join(lines), parse_mode="HTML")
 
 
@@ -133,8 +192,9 @@ async def cmd_participants(message: Message, db_user: User | None) -> None:
         await message.reply("Список участников доступен исполнителям и руководителям.")
         return
 
-    parts = message.text.split(maxsplit=1)
+    parts = (message.text or "").split(maxsplit=1)
     query = parts[1] if len(parts) > 1 else None
+
     async with AsyncSessionLocal() as session:
         repo = UserRepository(session)
         users = await repo.search_users(query, limit=15)
@@ -154,13 +214,12 @@ async def cmd_profile(message: Message, db_user: User | None) -> None:
         await message.reply("Профили сотрудников доступны исполнителям и руководителям.")
         return
 
-    parts = message.text.split(maxsplit=1)
+    parts = (message.text or "").split(maxsplit=1)
     if len(parts) < 2:
         await message.reply("Укажите сотрудника: /profile @username или /profile 15")
         return
 
     async with AsyncSessionLocal() as session:
-        user_repo = UserRepository(session)
         knowledge_repo = KnowledgeRepository(session)
         target = await _resolve_user(parts[1], session)
         if target is None:
@@ -169,11 +228,12 @@ async def cmd_profile(message: Message, db_user: User | None) -> None:
         notes = await knowledge_repo.list_profile_notes(target.id, limit=5)
         subscription = await knowledge_repo.get_subscription(db_user.id, target.id)
 
+    full_name = " ".join(part for part in [target.first_name, target.last_name] if part).strip()
     lines = [
-        f"<b>{target.first_name} {target.last_name or ''}</b>",
+        f"<b>{escape(full_name or 'Без имени')}</b>",
         f"ID: <code>{target.id}</code>",
-        f"Username: @{target.username}" if target.username else "Username: не указан",
-        f"Роль: {target.role.value}",
+        f"Username: @{escape(target.username)}" if target.username else "Username: не указан",
+        f"Роль: {escape(target.role.value)}",
         f"Последняя активность: {target.last_active_at.strftime('%d.%m.%Y %H:%M') if target.last_active_at else 'нет данных'}",
         f"Подписка: {'включена' if subscription and subscription.is_active else 'нет'}",
     ]
@@ -181,7 +241,7 @@ async def cmd_profile(message: Message, db_user: User | None) -> None:
         lines.append("\n<b>Последние заметки:</b>")
         for note in notes:
             author = note.author.first_name if note.author else "Система"
-            lines.append(f"• {author}: {note.body[:160]}")
+            lines.append(f"• {escape(author)}: {escape(_shorten(note.body, limit=160))}")
     else:
         lines.append("\nЗаметок по профилю пока нет.")
     await message.reply("\n".join(lines), parse_mode="HTML")
@@ -193,7 +253,7 @@ async def cmd_note(message: Message, db_user: User | None, bot: Bot) -> None:
         await message.reply("Заметки по профилям могут оставлять только исполнители и руководители.")
         return
 
-    parts = message.text.split(maxsplit=1)
+    parts = (message.text or "").split(maxsplit=1)
     if len(parts) < 2 or "|" not in parts[1]:
         await message.reply("Формат: /note @username | текст заметки")
         return
@@ -219,8 +279,8 @@ async def cmd_note(message: Message, db_user: User | None, bot: Bot) -> None:
     service = NotificationService(bot)
     await service.notify_profile_note(target_user=target, author=db_user, note_body=note.body, notify_target=False)
     await message.reply(
-        f"Заметка добавлена в профиль <b>{target.first_name}</b>.\n"
-        f"Чтобы смотреть обновления, используйте /watch {target.id}",
+        f"Заметка добавлена в профиль <b>{escape(target.first_name)}</b>.\n"
+        f"Чтобы следить за обновлениями, используйте /watch {target.id}",
         parse_mode="HTML",
     )
 
@@ -231,7 +291,7 @@ async def cmd_watch(message: Message, db_user: User | None) -> None:
         await message.reply("Подписки на профили доступны исполнителям и руководителям.")
         return
 
-    parts = message.text.split(maxsplit=1)
+    parts = (message.text or "").split(maxsplit=1)
     if len(parts) < 2:
         await message.reply("Укажите сотрудника: /watch @username")
         return
@@ -244,7 +304,7 @@ async def cmd_watch(message: Message, db_user: User | None) -> None:
         repo = KnowledgeRepository(session)
         await repo.upsert_subscription(watcher_user_id=db_user.id, target_user_id=target.id, active=True)
 
-    await message.reply(f"Подписка на профиль {target.first_name} включена.")
+    await message.reply(f"Подписка на профиль {escape(target.first_name)} включена.", parse_mode="HTML")
 
 
 @router.message(Command("unwatch"))
@@ -253,7 +313,7 @@ async def cmd_unwatch(message: Message, db_user: User | None) -> None:
         await message.reply("Подписки на профили доступны исполнителям и руководителям.")
         return
 
-    parts = message.text.split(maxsplit=1)
+    parts = (message.text or "").split(maxsplit=1)
     if len(parts) < 2:
         await message.reply("Укажите сотрудника: /unwatch @username")
         return
@@ -266,12 +326,102 @@ async def cmd_unwatch(message: Message, db_user: User | None) -> None:
         repo = KnowledgeRepository(session)
         await repo.upsert_subscription(watcher_user_id=db_user.id, target_user_id=target.id, active=False)
 
-    await message.reply(f"Подписка на профиль {target.first_name} отключена.")
+    await message.reply(f"Подписка на профиль {escape(target.first_name)} отключена.", parse_mode="HTML")
+
+
+@router.message(Command("groups"))
+async def cmd_groups(message: Message, db_user: User | None) -> None:
+    if not _is_staff(db_user):
+        await message.reply("Обзор групп доступен исполнителям и руководителям.")
+        return
+
+    async with AsyncSessionLocal() as session:
+        topic_repo = TopicRepository(session)
+        groups = await topic_repo.list_groups_with_topics()
+        metrics = await topic_repo.build_topic_metrics()
+
+    if not groups:
+        await message.reply("Группы и топики пока не синхронизированы.")
+        return
+
+    lines = ["<b>Обзор групп</b>"]
+    for group in groups:
+        ranked = _rank_group_topics(group, metrics)
+        top_topics = ranked[:3]
+        high_topics = sum(1 for item in ranked if item["priority"] in {"high", "critical"})
+        total_signals = sum(item["metrics"]["signal_count"] for item in ranked)
+        lines.append(
+            f"\n<b>{escape(group.title)}</b>\n"
+            f"топиков: {len(ranked)}, приоритетных: {high_topics}, сигналов: {total_signals}"
+        )
+        if top_topics:
+            for index, item in enumerate(top_topics, start=1):
+                topic = item["topic"]
+                lines.append(
+                    f"{index}. {_priority_badge(item['priority'])} {_topic_badge(topic)} "
+                    f"{escape(topic.title)} — внимание {item['metrics']['attention_count']}, "
+                    f"ситуации {item['metrics']['open_case_count']}"
+                )
+        else:
+            lines.append("Пока нет активных топиков.")
+
+    await message.reply("\n".join(lines), parse_mode="HTML")
+
+
+@router.message(Command("topics"))
+async def cmd_topics(message: Message, db_user: User | None) -> None:
+    if not _is_staff(db_user):
+        await message.reply("Обзор топиков доступен исполнителям и руководителям.")
+        return
+
+    async with AsyncSessionLocal() as session:
+        topic_repo = TopicRepository(session)
+        groups = await topic_repo.list_groups_with_topics()
+        metrics = await topic_repo.build_topic_metrics()
+
+    if not groups:
+        await message.reply("Топики пока не синхронизированы.")
+        return
+
+    target_group = None
+    if message.chat.type == "supergroup":
+        for group in groups:
+            if group.telegram_chat_id == message.chat.id:
+                target_group = group
+                break
+
+    if target_group is not None:
+        ranked = _rank_group_topics(target_group, metrics)
+        if not ranked:
+            await message.reply("В этой группе пока нет синхронизированных топиков.")
+            return
+        lines = [f"<b>Топики группы {escape(target_group.title)}</b>"]
+        for index, item in enumerate(ranked[:10], start=1):
+            lines.append(_format_topic_rank_line(item, index))
+        await message.reply("\n\n".join(lines), parse_mode="HTML")
+        return
+
+    lines = ["<b>AI-ранжирование топиков по группам</b>"]
+    for group in groups:
+        ranked = _rank_group_topics(group, metrics)[:5]
+        if not ranked:
+            continue
+        lines.append(f"\n<b>{escape(group.title)}</b>")
+        for index, item in enumerate(ranked, start=1):
+            topic = item["topic"]
+            lines.append(
+                f"{index}. {_priority_badge(item['priority'])} {_topic_badge(topic)} "
+                f"{escape(topic.title)} — тип {escape(topic.topic_kind or 'mixed')}, "
+                f"внимание {item['metrics']['attention_count']}, "
+                f"ситуации {item['metrics']['open_case_count']}"
+            )
+
+    await message.reply("\n".join(lines), parse_mode="HTML")
 
 
 @router.message(Command("status"))
 async def cmd_status(message: Message) -> None:
-    args = message.text.split(maxsplit=1)
+    args = (message.text or "").split(maxsplit=1)
     if len(args) < 2:
         await message.reply("Укажите номер задачи: /status REQ-2025-00001")
         return
@@ -283,7 +433,7 @@ async def cmd_status(message: Message) -> None:
         request = await repo.get_by_ticket(ticket_number)
 
     if request is None:
-        await message.reply(f"Задача <code>{ticket_number}</code> не найдена.", parse_mode="HTML")
+        await message.reply(f"Задача <code>{escape(ticket_number)}</code> не найдена.", parse_mode="HTML")
         return
 
     status_labels = {
@@ -309,12 +459,12 @@ async def cmd_status(message: Message) -> None:
             sla_text += " <b>Нарушен</b>"
 
     await message.reply(
-        f"<b>Задача {request.ticket_number}</b>\n"
+        f"<b>Задача {escape(request.ticket_number)}</b>\n"
         f"Статус: {status_labels.get(request.status.value, request.status.value)}\n"
         f"Приоритет: {priority_labels.get(request.priority.value, request.priority.value)}"
         f"{sla_text}\n"
         f"Создана: {request.created_at.strftime('%d.%m.%Y %H:%M')}\n\n"
-        f"{request.body[:200]}{'...' if len(request.body) > 200 else ''}",
+        f"{escape(_shorten(request.body, limit=220))}",
         parse_mode="HTML",
     )
 
@@ -324,9 +474,6 @@ async def cmd_my_requests(message: Message, db_user: User | None) -> None:
     if db_user is None:
         await message.reply("Вы еще не зарегистрированы в системе.")
         return
-
-    from sqlalchemy import select
-    from models.request import Request
 
     async with AsyncSessionLocal() as session:
         result = await session.execute(
@@ -341,9 +488,9 @@ async def cmd_my_requests(message: Message, db_user: User | None) -> None:
         await message.reply("У вас пока нет задач.")
         return
 
-    lines = ["<b>Ваши последние задачи:</b>\n"]
+    lines = ["<b>Ваши последние задачи:</b>"]
     for req in requests:
-        lines.append(f"• <code>{req.ticket_number}</code> — {req.body[:50]}{'...' if len(req.body) > 50 else ''}")
+        lines.append(f"• <code>{escape(req.ticket_number)}</code> — {escape(_shorten(req.body, limit=70))}")
     await message.reply("\n".join(lines), parse_mode="HTML")
 
 
@@ -368,14 +515,14 @@ async def cmd_register_topic_start(message: Message, state: FSMContext, db_user:
 
 @router.message(RegisterTopicFSM.waiting_name)
 async def register_topic_name(message: Message, state: FSMContext) -> None:
-    await state.update_data(dept_name=message.text.strip())
+    await state.update_data(dept_name=(message.text or "").strip())
     await state.set_state(RegisterTopicFSM.waiting_sla)
     await message.reply("Укажите SLA в часах. По умолчанию 24:")
 
 
 @router.message(RegisterTopicFSM.waiting_sla)
 async def register_topic_sla(message: Message, state: FSMContext) -> None:
-    text = message.text.strip()
+    text = (message.text or "").strip()
     sla = int(text) if text.isdigit() else 24
     await state.update_data(sla_hours=sla)
     await state.set_state(RegisterTopicFSM.waiting_emoji)
@@ -384,7 +531,7 @@ async def register_topic_sla(message: Message, state: FSMContext) -> None:
 
 @router.message(RegisterTopicFSM.waiting_emoji)
 async def register_topic_emoji(message: Message, state: FSMContext) -> None:
-    text = message.text.strip()
+    text = (message.text or "").strip()
     emoji = None if text == "-" else text[:10]
     data = await state.get_data()
     await state.clear()
@@ -414,8 +561,9 @@ async def register_topic_emoji(message: Message, state: FSMContext) -> None:
         await session.commit()
 
     await message.reply(
-        f"Топик привязан к отделу <b>{dept.name}</b>.\n"
-        "AI продолжит обрабатывать поток автоматически, а рабочие сигналы при необходимости будут превращаться в задачи.",
+        f"Топик привязан к отделу <b>{escape(dept.name)}</b>.\n"
+        "AI продолжит автоматически разбирать поток, а рабочие сигналы при необходимости "
+        "будут становиться задачами.",
         parse_mode="HTML",
     )
 
@@ -428,16 +576,30 @@ async def cmd_list_topics(message: Message, db_user: User | None) -> None:
 
     async with AsyncSessionLocal() as session:
         topic_repo = TopicRepository(session)
-        topics = await topic_repo.list_topics()
+        groups = await topic_repo.list_groups_with_topics()
+        metrics = await topic_repo.build_topic_metrics()
 
-    group_topics = [topic for topic in topics if topic.group and topic.group.telegram_chat_id == message.chat.id]
-    if not group_topics:
-        await message.reply("Топики еще не синхронизированы. Достаточно написать хотя бы одно сообщение в нужном топике.")
+    target_group = None
+    for group in groups:
+        if group.telegram_chat_id == message.chat.id:
+            target_group = group
+            break
+
+    if target_group is None:
+        await message.reply("Топики этой группы пока не синхронизированы.")
         return
 
-    lines = ["<b>Обнаруженные топики:</b>\n"]
-    for topic in group_topics:
+    ranked = _rank_group_topics(target_group, metrics)
+    if not ranked:
+        await message.reply("Топики еще не синхронизированы. Достаточно одного сообщения в нужном топике.")
+        return
+
+    lines = ["<b>Обнаруженные топики:</b>"]
+    for item in ranked:
+        topic = item["topic"]
         lines.append(
-            f"{topic.icon_emoji or '•'} <b>{topic.title}</b> — thread={topic.telegram_topic_id}, kind={topic.topic_kind}, signals={topic.signal_count}"
+            f"{_topic_badge(topic)} <b>{escape(topic.title)}</b> — "
+            f"thread={topic.telegram_topic_id}, kind={escape(topic.topic_kind)}, "
+            f"signals={item['metrics']['signal_count']}, attention={item['metrics']['attention_count']}"
         )
     await message.reply("\n".join(lines), parse_mode="HTML")

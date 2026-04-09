@@ -1,10 +1,11 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from models.department import Department
+from models.flow import FlowCase, FlowSignal
 from models.telegram_group import TelegramGroup
 from models.topic import TelegramTopic, TopicAIProfile
 
@@ -115,3 +116,70 @@ class TopicRepository:
             .where(TelegramTopic.id == topic_id)
         )
         return result.scalar_one_or_none()
+
+    async def list_groups_with_topics(self) -> list[TelegramGroup]:
+        result = await self.session.execute(
+            select(TelegramGroup)
+            .options(selectinload(TelegramGroup.topics).selectinload(TelegramTopic.profile))
+            .order_by(TelegramGroup.title)
+        )
+        return list(result.scalars().all())
+
+    async def build_topic_metrics(self, group_id: int | None = None) -> dict[int, dict]:
+        signal_query = (
+            select(
+                FlowSignal.topic_id.label("topic_id"),
+                func.count(FlowSignal.id).label("signal_count"),
+                func.count(case((FlowSignal.requires_attention == True, 1))).label("attention_count"),
+                func.count(case((FlowSignal.has_media == True, 1))).label("media_signal_count"),
+                func.max(FlowSignal.happened_at).label("last_signal_at"),
+            )
+            .where(FlowSignal.topic_id.is_not(None))
+            .group_by(FlowSignal.topic_id)
+        )
+        case_query = (
+            select(
+                FlowCase.primary_topic_id.label("topic_id"),
+                func.count(FlowCase.id).label("case_count"),
+                func.count(case((FlowCase.is_critical == True, 1))).label("critical_case_count"),
+                func.count(case((FlowCase.status.in_(["open", "watching"]), 1))).label("open_case_count"),
+            )
+            .where(FlowCase.primary_topic_id.is_not(None))
+            .group_by(FlowCase.primary_topic_id)
+        )
+
+        if group_id is not None:
+            signal_query = signal_query.where(FlowSignal.group_id == group_id)
+            case_query = case_query.where(FlowCase.group_id == group_id)
+
+        signal_rows = (await self.session.execute(signal_query)).all()
+        case_rows = (await self.session.execute(case_query)).all()
+
+        metrics: dict[int, dict] = {}
+        for row in signal_rows:
+            metrics[row.topic_id] = {
+                "signal_count": row.signal_count or 0,
+                "attention_count": row.attention_count or 0,
+                "media_signal_count": row.media_signal_count or 0,
+                "last_signal_at": row.last_signal_at,
+                "case_count": 0,
+                "critical_case_count": 0,
+                "open_case_count": 0,
+            }
+        for row in case_rows:
+            metrics.setdefault(
+                row.topic_id,
+                {
+                    "signal_count": 0,
+                    "attention_count": 0,
+                    "media_signal_count": 0,
+                    "last_signal_at": None,
+                    "case_count": 0,
+                    "critical_case_count": 0,
+                    "open_case_count": 0,
+                },
+            )
+            metrics[row.topic_id]["case_count"] = row.case_count or 0
+            metrics[row.topic_id]["critical_case_count"] = row.critical_case_count or 0
+            metrics[row.topic_id]["open_case_count"] = row.open_case_count or 0
+        return metrics

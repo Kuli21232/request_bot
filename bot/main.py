@@ -1,4 +1,4 @@
-"""Точка входа Telegram-бота."""
+"""Entry point for the Telegram bot."""
 import asyncio
 import logging
 
@@ -9,8 +9,8 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand
 
 from bot.config import settings
-from bot.handlers import forum_messages, commands, callbacks
-from bot.middlewares import AuthMiddleware, TopicResolverMiddleware, RateLimitMiddleware
+from bot.handlers import callbacks, commands, forum_messages
+from bot.middlewares import AuthMiddleware, RateLimitMiddleware, TopicResolverMiddleware
 from bot.services.sla_monitor import setup_scheduler
 
 logging.basicConfig(
@@ -21,34 +21,41 @@ logger = logging.getLogger(__name__)
 
 
 async def set_commands(bot: Bot) -> None:
-    await bot.set_my_commands([
-        BotCommand(command="start", description="Запуск бота"),
-        BotCommand(command="help", description="Справка"),
-        BotCommand(command="status", description="Статус заявки"),
-        BotCommand(command="my", description="Мои заявки"),
-        BotCommand(command="register_topic", description="Регистрация топика (admin)"),
-        BotCommand(command="list_topics", description="Список топиков (admin)"),
-    ])
+    await bot.set_my_commands(
+        [
+            BotCommand(command="start", description="Запуск бота"),
+            BotCommand(command="help", description="Список команд"),
+            BotCommand(command="ask", description="Задать вопрос по базе знаний"),
+            BotCommand(command="guide", description="Найти инструкцию"),
+            BotCommand(command="participants", description="Участники системы"),
+            BotCommand(command="profile", description="Профиль сотрудника"),
+            BotCommand(command="groups", description="Обзор групп и потока"),
+            BotCommand(command="topics", description="AI-сортировка топиков"),
+            BotCommand(command="my", description="Мои задачи"),
+            BotCommand(command="status", description="Статус задачи"),
+            BotCommand(command="watch", description="Подписка на профиль"),
+            BotCommand(command="unwatch", description="Убрать подписку"),
+            BotCommand(command="register_topic", description="Привязать топик к отделу"),
+            BotCommand(command="list_topics", description="Топики текущей группы"),
+        ]
+    )
 
 
 def create_dispatcher() -> Dispatcher:
     dp = Dispatcher(storage=MemoryStorage())
 
-    # Middlewares (порядок важен)
     dp.message.outer_middleware(AuthMiddleware())
     dp.message.outer_middleware(RateLimitMiddleware(rate=settings.RATE_LIMIT_PER_MINUTE))
     dp.message.outer_middleware(TopicResolverMiddleware())
 
-    # Роутеры
     dp.include_router(commands.router)
     dp.include_router(forum_messages.router)
     dp.include_router(callbacks.router)
-
     return dp
 
 
 async def main_polling() -> None:
-    """Режим polling — для разработки."""
+    """Polling mode for local development."""
     bot = Bot(token=settings.BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = create_dispatcher()
 
@@ -56,7 +63,7 @@ async def main_polling() -> None:
     scheduler.start()
 
     await set_commands(bot)
-    logger.info("Запуск в режиме polling...")
+    logger.info("Starting bot in polling mode")
     try:
         await dp.start_polling(bot, allowed_updates=["message", "callback_query"])
     finally:
@@ -65,13 +72,12 @@ async def main_polling() -> None:
 
 
 def main_webhook() -> None:
-    """Режим webhook — для продакшена на VDS."""
+    """Webhook mode for production."""
     from aiohttp import web
     from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
     bot = Bot(token=settings.BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
     dp = create_dispatcher()
-
     scheduler = setup_scheduler(bot)
 
     webhook_path = f"/webhook/{settings.BOT_TOKEN}"
@@ -90,7 +96,7 @@ def main_webhook() -> None:
         scheduler.shutdown()
         await bot.delete_webhook()
         await bot.session.close()
-        logger.info("Webhook удалён.")
+        logger.info("Webhook удален")
 
     app = web.Application()
     app.on_startup.append(on_startup)

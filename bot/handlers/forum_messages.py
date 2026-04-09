@@ -256,6 +256,7 @@ async def handle_forum_message(
             await flow_repo.create_signal_media(signal_id=signal.id, **media_item)
 
         topic_ai.observe_signal(
+            stored_topic,
             stored_profile,
             signal_type=signal_type,
             action_needed=action_needed,
