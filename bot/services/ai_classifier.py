@@ -6,6 +6,44 @@ from bot.services.llm_service import LLMService
 
 logger = logging.getLogger(__name__)
 
+IMPORTANCE_RANK = {
+    "low": 0,
+    "normal": 1,
+    "medium": 1,
+    "high": 2,
+    "critical": 3,
+}
+
+URGENT_MARKERS = (
+    "срочно",
+    "очень срочно",
+    "срочная",
+    "срочный",
+    "срочняк",
+    "немедленно",
+    "нужна помощь",
+    "помогите",
+    "помощь",
+    "не успеваем",
+    "критично",
+    "горит",
+    "asap",
+)
+
+BLOCKER_MARKERS = (
+    "не работает",
+    "не можем",
+    "не получается",
+    "ошибка",
+    "слом",
+    "проблем",
+    "не бьется",
+    "не проходит",
+    "нет цены",
+    "завис",
+    "не достав",
+)
+
 CLASSIFY_SYSTEM_PROMPT = (
     "Ты operational AI-аналитик BeerShop. "
     "Твоя задача не просто сработать по шаблону, а понять смысл сообщения в рабочем потоке. "
@@ -81,4 +119,52 @@ class AIClassifier:
         parsed.setdefault("entities", {})
         parsed.setdefault("tags", [])
         parsed.setdefault("confidence", 0.5)
+        return self._apply_text_heuristics(parsed, text=text, topic_context=topic_context)
+
+    def _apply_text_heuristics(self, parsed: dict, *, text: str, topic_context: dict | None) -> dict:
+        normalized_text = " ".join(text.lower().replace("ё", "е").split())
+        topic_title = ((topic_context or {}).get("topic_title") or "").lower().replace("ё", "е")
+        topic_kind = ((topic_context or {}).get("topic_kind") or "").lower()
+
+        has_urgent = any(marker in normalized_text for marker in URGENT_MARKERS)
+        has_blocker = any(marker in normalized_text for marker in BLOCKER_MARKERS)
+        is_operational_topic = topic_kind in {"logistics", "support", "incident", "compliance", "finance", "operations"}
+        is_delivery_topic = "достав" in topic_title or topic_kind == "logistics"
+        is_critical_domain = topic_kind in {"incident", "compliance", "finance"} or any(
+            needle in normalized_text for needle in ("егаис", "газ", "чеки", "возврат")
+        )
+
+        if has_urgent:
+            parsed["importance"] = self._raise_importance(parsed.get("importance"), "high")
+            if parsed.get("action_needed") in {"ignore", "digest_only"}:
+                parsed["action_needed"] = "attach_to_case"
+
+        if has_urgent and has_blocker:
+            parsed["importance"] = self._raise_importance(parsed.get("importance"), "high")
+            parsed["action_needed"] = "create_case" if is_critical_domain else "attach_to_case"
+
+        if is_delivery_topic and has_urgent:
+            parsed["signal_type"] = "delivery"
+            parsed["importance"] = self._raise_importance(parsed.get("importance"), "high")
+            if parsed.get("action_needed") in {"ignore", "digest_only"}:
+                parsed["action_needed"] = "attach_to_case"
+
+        if is_critical_domain and has_urgent and has_blocker:
+            parsed["importance"] = self._raise_importance(parsed.get("importance"), "critical")
+            parsed["action_needed"] = "suggest_escalation"
+
+        if is_operational_topic and normalized_text and not parsed.get("summary"):
+            parsed["summary"] = text[:120]
+
+        if not parsed.get("recommended_action") or parsed.get("recommended_action") in {"digest_only", "ignore"}:
+            parsed["recommended_action"] = parsed.get("action_needed")
+
         return parsed
+
+    @staticmethod
+    def _raise_importance(current: str | None, target: str) -> str:
+        current_rank = IMPORTANCE_RANK.get((current or "normal").lower(), 1)
+        target_rank = IMPORTANCE_RANK.get(target.lower(), 1)
+        if target_rank > current_rank:
+            return target
+        return current or target

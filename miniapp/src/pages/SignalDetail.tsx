@@ -33,12 +33,21 @@ export default function SignalDetail() {
   }, [id])
 
   if (loading) {
-    return <div style={{ padding: '40px 0' }}><Loader /></div>
+    return (
+      <div style={{ padding: '40px 0' }}>
+        <Loader />
+      </div>
+    )
   }
 
   if (!signal) {
     return <div style={{ padding: 20, color: 'var(--text-soft)' }}>Сообщение не найдено</div>
   }
+
+  const actionLabel =
+    getRecommendedActionLabel(signal.actionability) ||
+    getRecommendedActionLabel(signal.recommended_action) ||
+    'Пока просто наблюдать'
 
   return (
     <div className="app-shell">
@@ -56,9 +65,19 @@ export default function SignalDetail() {
           </div>
           <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.2 }}>{getReadableSignalTitle(signal)}</div>
           <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {signal.store && <span className="pill" style={{ background: 'rgba(255,255,255,0.14)', color: '#fff' }}>{signal.store}</span>}
-            {signal.case_title && <span className="pill" style={{ background: 'rgba(255,255,255,0.14)', color: '#fff' }}>{signal.case_title}</span>}
-            {signal.recommended_action && <span className="pill" style={{ background: 'rgba(255,255,255,0.14)', color: '#fff' }}>{getRecommendedActionLabel(signal.recommended_action)}</span>}
+            {signal.store && (
+              <span className="pill" style={{ background: 'rgba(255,255,255,0.14)', color: '#fff' }}>
+                {signal.store}
+              </span>
+            )}
+            {signal.case_title && (
+              <span className="pill" style={{ background: 'rgba(255,255,255,0.14)', color: '#fff' }}>
+                {signal.case_title}
+              </span>
+            )}
+            <span className="pill" style={{ background: 'rgba(255,255,255,0.14)', color: '#fff' }}>
+              {actionLabel}
+            </span>
           </div>
         </div>
       </div>
@@ -66,7 +85,9 @@ export default function SignalDetail() {
       <div className="screen-section">
         <section className="glass-card" style={{ padding: 16 }}>
           <div className="section-title" style={{ fontSize: 17, marginBottom: 8 }}>Что написал человек</div>
-          <div style={{ fontSize: 15, whiteSpace: 'pre-wrap', lineHeight: 1.55, color: 'var(--text-main)' }}>{signal.body}</div>
+          <div style={{ fontSize: 15, whiteSpace: 'pre-wrap', lineHeight: 1.55, color: 'var(--text-main)' }}>
+            {signal.body}
+          </div>
         </section>
       </div>
 
@@ -76,7 +97,7 @@ export default function SignalDetail() {
           <div style={{ display: 'grid', gap: 14 }}>
             <Field label="Тип сообщения" value={getSignalKindLabel(signal.kind)} />
             <Field label="Оценка важности" value={getImportanceLabel(signal.importance)} />
-            <Field label="Что делать дальше" value={getRecommendedActionLabel(signal.recommended_action) || 'Пока просто наблюдать'} />
+            <Field label="Что делать дальше" value={actionLabel} />
             <Field label="Тема Telegram" value={signal.topic_label} />
             <Field label="Отдел" value={signal.department_name} />
             <Field label="Рабочая задача" value={signal.request_ticket} />
@@ -87,10 +108,21 @@ export default function SignalDetail() {
       {signal.case_id && (
         <div className="screen-section">
           <Link to={`/cases/${signal.case_id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
-            <section className="glass-card" style={{ padding: 16, border: '1px solid rgba(15,118,110,0.18)', background: 'linear-gradient(180deg, rgba(236,253,245,0.92), rgba(255,255,255,0.94))' }}>
-              <div style={{ fontSize: 12, color: '#0f766e', marginBottom: 6, fontWeight: 700 }}>Сообщение уже привязано</div>
+            <section
+              className="glass-card"
+              style={{
+                padding: 16,
+                border: '1px solid rgba(15,118,110,0.18)',
+                background: 'linear-gradient(180deg, rgba(236,253,245,0.92), rgba(255,255,255,0.94))',
+              }}
+            >
+              <div style={{ fontSize: 12, color: '#0f766e', marginBottom: 6, fontWeight: 700 }}>
+                Сообщение уже привязано
+              </div>
               <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--text-main)' }}>{signal.case_title}</div>
-              <div style={{ fontSize: 13, color: 'var(--text-soft)', marginTop: 6 }}>Открыть общую ситуацию и посмотреть похожие сообщения.</div>
+              <div style={{ fontSize: 13, color: 'var(--text-soft)', marginTop: 6 }}>
+                Открыть общую ситуацию и посмотреть похожие сообщения.
+              </div>
             </section>
           </Link>
         </div>
