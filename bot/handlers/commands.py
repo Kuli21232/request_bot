@@ -152,7 +152,7 @@ async def cmd_ask(message: Message, db_user: User | None) -> None:
     async with AsyncSessionLocal() as session:
         repo = KnowledgeRepository(session)
         service = GuidanceService(repo)
-        answer = await service.answer(parts[1], audience=(db_user.role.value if db_user else "all"))
+        answer = await service.answer(parts[1], audience=(db_user.role.value if db_user else "all"), mode="answer")
 
     lines = [answer["answer"]]
     if answer["sources"]:
@@ -170,20 +170,14 @@ async def cmd_guide(message: Message, db_user: User | None) -> None:
 
     async with AsyncSessionLocal() as session:
         repo = KnowledgeRepository(session)
-        articles = await repo.list_articles(
-            published_only=True,
-            search=parts[1],
-        )
+        service = GuidanceService(repo)
+        answer = await service.answer(parts[1], audience=(db_user.role.value if db_user else "all"), mode="guide")
 
-    if not articles:
-        await message.reply("По этой теме пока нет инструкции в базе знаний.")
-        return
-
-    top = articles[:5]
-    lines = ["Нашел подходящие инструкции:"]
-    for article in top:
-        lines.append(f"• <b>{escape(article.title)}</b>\n{escape(_shorten(article.summary or article.body, limit=180))}")
-    await message.reply("\n\n".join(lines), parse_mode="HTML")
+    lines = [answer["answer"]]
+    if answer["sources"]:
+        lines.append("\nНа основе материалов:")
+        lines.extend(f"• {escape(source['title'])}" for source in answer["sources"])
+    await message.reply("\n".join(lines), parse_mode="HTML")
 
 
 @router.message(Command("participants"))
