@@ -5,6 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from api.dependencies import get_current_user, get_db, require_agent
+from bot.database.repositories.flow_repo import FlowRepository
+from bot.database.repositories.topic_repo import TopicRepository
+from bot.services.topic_ai_engine import TopicAIEngine
 from models.flow import FlowCase, FlowSignal
 from models.request import Request
 
@@ -210,6 +213,84 @@ async def get_digest_overview(
         "noise": overview.noise,
         "critical_cases": overview.critical_cases,
         "top_kinds": [{"kind": row.kind, "count": row.count} for row in top_kinds],
+    }
+
+
+@router.get("/topic-sections")
+async def get_topic_sections(
+    kind: str | None = Query(None),
+    requires_attention: bool | None = Query(None),
+    limit_topics: int = Query(12, ge=1, le=30),
+    signals_per_topic: int = Query(4, ge=1, le=10),
+    cases_per_topic: int = Query(3, ge=1, le=10),
+    current_user=Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    topic_repo = TopicRepository(db)
+    flow_repo = FlowRepository(db)
+    engine = TopicAIEngine()
+
+    groups = await topic_repo.list_groups_with_topics()
+    metrics = await topic_repo.build_topic_metrics()
+    ranked_topics: list[dict] = []
+    for group in groups:
+        ranked_topics.extend(
+            engine.sort_topics([topic for topic in group.topics if topic.is_active], metrics)
+        )
+
+    ranked_topics.sort(
+        key=lambda item: (
+            item["score"],
+            item["metrics"]["attention_count"],
+            item["metrics"]["open_case_count"],
+            item["metrics"]["signal_count"],
+        ),
+        reverse=True,
+    )
+
+    sections = []
+    for item in ranked_topics:
+        topic = item["topic"]
+        profile = item["profile"]
+        signals = await flow_repo.list_topic_signal_briefs(
+            topic_id=topic.id,
+            limit=signals_per_topic,
+            kind=kind,
+            requires_attention=requires_attention,
+        )
+        cases = await flow_repo.list_topic_cases(topic_id=topic.id, limit=cases_per_topic)
+        if not signals and not cases:
+            continue
+
+        automation = dict(profile.behavior_rules or {}).get("automation", {})
+        sections.append(
+            {
+                "topic_id": topic.id,
+                "topic_title": topic.title,
+                "group_id": topic.group_id,
+                "group_title": topic.group.title if topic.group else None,
+                "icon_emoji": topic.icon_emoji,
+                "topic_kind": topic.topic_kind,
+                "priority": item["priority"],
+                "score": item["score"],
+                "reasons": item["reasons"],
+                "stats": {
+                    **item["metrics"],
+                    "message_count": topic.message_count,
+                    "media_count": topic.media_count,
+                },
+                "profile_summary": profile.profile_summary,
+                "automation": automation,
+                "signals": [_serialize_signal(signal) for signal in signals],
+                "cases": [_serialize_case(flow_case) for flow_case in cases],
+            }
+        )
+        if len(sections) >= limit_topics:
+            break
+
+    return {
+        "items": sections,
+        "total": len(sections),
     }
 
 

@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from api.dependencies import get_current_user, get_db, require_admin
 from bot.services.topic_learning_service import TopicLearningService
@@ -17,6 +18,7 @@ async def list_topics(
 ):
     result = await db.execute(
         select(TelegramTopic, TopicAIProfile)
+        .options(selectinload(TelegramTopic.group))
         .join(TopicAIProfile, TopicAIProfile.topic_id == TelegramTopic.id, isouter=True)
         .order_by(TelegramTopic.last_seen_at.desc().nullslast())
     )
@@ -32,6 +34,7 @@ async def get_topic(
 ):
     result = await db.execute(
         select(TelegramTopic, TopicAIProfile)
+        .options(selectinload(TelegramTopic.group))
         .join(TopicAIProfile, TopicAIProfile.topic_id == TelegramTopic.id, isouter=True)
         .where(TelegramTopic.id == topic_id)
     )
@@ -114,6 +117,7 @@ def _serialize_topic(topic: TelegramTopic, profile: TopicAIProfile | None, *, fu
     data = {
         "id": topic.id,
         "group_id": topic.group_id,
+        "group_title": topic.group.title if getattr(topic, "group", None) else None,
         "telegram_topic_id": topic.telegram_topic_id,
         "title": topic.title,
         "icon_emoji": topic.icon_emoji,
@@ -126,6 +130,7 @@ def _serialize_topic(topic: TelegramTopic, profile: TopicAIProfile | None, *, fu
         "profile_version": topic.profile_version,
     }
     if profile:
+        automation = dict(profile.behavior_rules or {}).get("automation")
         data["profile"] = {
             "preferred_department_id": profile.preferred_department_id,
             "profile_summary": profile.profile_summary,
@@ -135,6 +140,7 @@ def _serialize_topic(topic: TelegramTopic, profile: TopicAIProfile | None, *, fu
             "media_policy": profile.media_policy,
             "confidence_threshold": profile.confidence_threshold,
             "auto_learn_enabled": profile.auto_learn_enabled,
+            "automation": automation,
         }
         if full:
             data["profile"]["system_prompt"] = profile.system_prompt

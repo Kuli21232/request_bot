@@ -7,6 +7,7 @@ from bot.database import AsyncSessionLocal
 from bot.database.repositories.request_repo import RequestRepository
 from bot.database.repositories.department_repo import DepartmentRepository
 from bot.services.notification_service import NotificationService
+from bot.services.topic_automation_service import TopicAutomationService
 from bot.services.topic_learning_service import TopicLearningService
 
 logger = logging.getLogger(__name__)
@@ -38,6 +39,14 @@ async def retrain_topic_profiles() -> None:
         logger.info("Topic trainer: retrained %d topics", len(results))
 
 
+async def refresh_topic_automation() -> None:
+    async with AsyncSessionLocal() as session:
+        automation = TopicAutomationService()
+        results = await automation.refresh_active_topics(session, limit=30)
+        await session.commit()
+        logger.info("Topic automation: refreshed %d topics", len(results))
+
+
 def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
     # Проверка SLA каждые 15 минут
@@ -54,6 +63,13 @@ def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
         trigger="interval",
         minutes=60,
         id="topic_profile_retrain",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        refresh_topic_automation,
+        trigger="interval",
+        minutes=20,
+        id="topic_automation_refresh",
         replace_existing=True,
     )
     return scheduler

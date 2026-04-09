@@ -81,12 +81,16 @@ class FlowRepository:
         *,
         topic_id: int,
         limit: int = 5,
+        kind: str | None = None,
+        requires_attention: bool | None = None,
     ) -> list[FlowSignal]:
+        query = select(FlowSignal).where(FlowSignal.topic_id == topic_id)
+        if kind:
+            query = query.where(FlowSignal.kind == kind)
+        if requires_attention is not None:
+            query = query.where(FlowSignal.requires_attention == requires_attention)
         result = await self.session.execute(
-            select(FlowSignal)
-            .where(FlowSignal.topic_id == topic_id)
-            .order_by(FlowSignal.happened_at.desc())
-            .limit(limit)
+            query.order_by(FlowSignal.happened_at.desc()).limit(limit)
         )
         return list(result.scalars().all())
 
