@@ -13,6 +13,7 @@ class LLMService:
         self.enabled = settings.OLLAMA_ENABLED
         self.base_url = settings.OLLAMA_BASE_URL.rstrip("/")
         self.model = settings.OLLAMA_MODEL
+        self.fallback_model = settings.OLLAMA_FALLBACK_MODEL
 
     async def generate_text(
         self,
@@ -71,9 +72,42 @@ class LLMService:
         timeout: int,
         response_format: str | None = None,
     ) -> str | None:
+        primary = await self._request_model(
+            model=self.model,
+            prompt=prompt,
+            system=system,
+            temperature=temperature,
+            timeout=timeout,
+            response_format=response_format,
+        )
+        if primary:
+            return primary
+
+        if self.fallback_model and self.fallback_model != self.model:
+            logger.warning("Retrying LLM request with fallback model %s", self.fallback_model)
+            return await self._request_model(
+                model=self.fallback_model,
+                prompt=prompt,
+                system=system,
+                temperature=temperature,
+                timeout=timeout,
+                response_format=response_format,
+            )
+        return None
+
+    async def _request_model(
+        self,
+        *,
+        model: str,
+        prompt: str,
+        system: str | None,
+        temperature: float,
+        timeout: int,
+        response_format: str | None,
+    ) -> str | None:
         try:
             body = {
-                "model": self.model,
+                "model": model,
                 "prompt": prompt,
                 "stream": False,
                 "options": {
@@ -92,10 +126,13 @@ class LLMService:
                     timeout=aiohttp.ClientTimeout(total=timeout),
                 ) as resp:
                     if resp.status != 200:
-                        logger.warning("LLM returned status %s", resp.status)
+                        logger.warning("LLM returned status %s for model %s", resp.status, model)
                         return None
                     data = await resp.json()
+                    if data.get("error"):
+                        logger.warning("LLM error for model %s: %s", model, data["error"])
+                        return None
                     return data.get("response", "")
         except Exception as exc:
-            logger.warning("LLM unavailable: %s", exc)
+            logger.warning("LLM unavailable for model %s: %s", model, exc)
             return None

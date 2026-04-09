@@ -9,11 +9,9 @@ class Settings(BaseSettings):
     WEBHOOK_BASE_URL: str = ""
     MINIAPP_BASE_URL: str = ""
     BOT_PORT: int = 8080
-    # Если WEBHOOK_BASE_URL пустой — используем polling.
-    # MINIAPP_BASE_URL используется только для ссылок Web App.
 
     # PostgreSQL
-    DATABASE_URL: str  # postgresql+asyncpg://user:pass@host:5432/db
+    DATABASE_URL: str
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379/0"
@@ -22,10 +20,11 @@ class Settings(BaseSettings):
     API_SECRET_KEY: str = "change-me-in-production"
     JWT_EXPIRE_MINUTES: int = 1440
 
-    # Ollama (бесплатный LLM)
+    # Ollama
     OLLAMA_BASE_URL: str = "http://localhost:11434"
-    OLLAMA_MODEL: str = "llama3"
-    OLLAMA_ENABLED: bool = False  # включить AI-классификацию
+    OLLAMA_MODEL: str = "qwen2.5:1.5b"
+    OLLAMA_FALLBACK_MODEL: str = "qwen2.5:1.5b"
+    OLLAMA_ENABLED: bool = False
 
     # SLA
     DEFAULT_SLA_HOURS: int = 24
@@ -34,15 +33,15 @@ class Settings(BaseSettings):
     NORMAL_SLA_HOURS: int = 24
     LOW_SLA_HOURS: int = 72
 
-    # Дубликаты
+    # Duplicate detection
     DUPLICATE_SIMILARITY_THRESHOLD: float = 0.80
 
-    # Уведомления
+    # Notifications
     WAITING_REMINDER_HOURS: int = 48
     POST_RESOLVE_SURVEY_HOURS: int = 24
     NOTIFICATION_RETRY_LIMIT: int = 3
 
-    # Ограничение запросов (сообщений в минуту от одного пользователя)
+    # Rate limiting
     RATE_LIMIT_PER_MINUTE: int = 10
 
 
