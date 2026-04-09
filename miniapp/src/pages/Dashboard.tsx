@@ -1,38 +1,23 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { getMyStats, getDigestOverview, getSignals, getCases } from '../api/client'
-import type { Stats, FlowSignal, FlowCase } from '../api/client'
+import { getCases, getDigestOverview, getMyStats, getSignals } from '../api/client'
+import type { FlowCase, FlowSignal, Stats } from '../api/client'
 import { Loader } from '../components/Loader'
 import WebApp from '../telegram'
+import {
+  getCaseAccent,
+  getReadableCaseHint,
+  getReadableSignalTitle,
+  getRecommendedActionLabel,
+  getSignalAccent,
+  getSignalKindLabel,
+} from '../utils/flow'
 
 const ROLE_LABEL: Record<string, string> = {
-  user: 'Пользователь',
-  agent: 'Агент',
-  supervisor: 'Супервизор',
+  user: 'Сотрудник',
+  agent: 'Исполнитель',
+  supervisor: 'Координатор',
   admin: 'Администратор',
-}
-
-function StatCard({ value, label, color, link }: { value: number; label: string; color: string; link?: string }) {
-  const inner = (
-    <div
-      style={{
-        background: color,
-        borderRadius: 16,
-        padding: '16px 14px',
-        color: '#fff',
-        position: 'relative',
-        overflow: 'hidden',
-        boxShadow: `0 4px 14px ${color}55`,
-      }}
-    >
-      <div style={{ position: 'absolute', top: -14, right: -14, width: 70, height: 70, borderRadius: '50%', background: 'rgba(255,255,255,0.12)' }} />
-      <div style={{ fontSize: 32, fontWeight: 800, lineHeight: 1.1, position: 'relative' }}>{value}</div>
-      <div style={{ fontSize: 12, marginTop: 4, opacity: 0.85, fontWeight: 500, position: 'relative' }}>{label}</div>
-    </div>
-  )
-
-  if (link) return <Link to={link} style={{ textDecoration: 'none' }}>{inner}</Link>
-  return inner
 }
 
 function timeAgo(iso?: string) {
@@ -46,28 +31,64 @@ function timeAgo(iso?: string) {
   return `${Math.floor(hrs / 24)} д назад`
 }
 
-function ActionRow({ to, icon, label, badge }: { to: string; icon: string; label: string; badge?: number }) {
+function StatCard({ value, label, hint, accent, link }: { value: number; label: string; hint: string; accent: string; link: string }) {
+  return (
+    <Link to={link} style={{ textDecoration: 'none' }}>
+      <div
+        className="glass-card"
+        style={{
+          padding: '16px 15px',
+          minHeight: 120,
+          position: 'relative',
+          overflow: 'hidden',
+          background: `linear-gradient(180deg, rgba(255,255,255,0.94), rgba(255,255,255,0.82)), radial-gradient(circle at top right, ${accent}1f, transparent 42%)`,
+        }}
+      >
+        <div style={{ width: 42, height: 42, borderRadius: 14, background: `${accent}16`, color: accent, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 800, fontSize: 18, marginBottom: 12 }}>
+          {value}
+        </div>
+        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-main)' }}>{label}</div>
+        <div style={{ fontSize: 12, color: 'var(--text-soft)', lineHeight: 1.45, marginTop: 6 }}>{hint}</div>
+      </div>
+    </Link>
+  )
+}
+
+function StepCard({ icon, title, text }: { icon: string; title: string; text: string }) {
+  return (
+    <div className="soft-card" style={{ padding: '14px 14px 13px' }}>
+      <div style={{ fontSize: 22, marginBottom: 10 }}>{icon}</div>
+      <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-main)', marginBottom: 5 }}>{title}</div>
+      <div style={{ fontSize: 12, color: 'var(--text-soft)', lineHeight: 1.45 }}>{text}</div>
+    </div>
+  )
+}
+
+function ActionRow({ to, icon, label, hint, badge }: { to: string; icon: string; label: string; hint: string; badge?: number }) {
   return (
     <Link
       to={to}
       style={{
         display: 'flex',
         alignItems: 'center',
-        padding: '13px 16px',
         gap: 12,
+        padding: '14px 16px',
         textDecoration: 'none',
         color: 'inherit',
-        borderBottom: '1px solid rgba(0,0,0,0.05)',
+        borderBottom: '1px solid rgba(15,23,42,0.06)',
       }}
     >
-      <span style={{ fontSize: 20, width: 28, textAlign: 'center' }}>{icon}</span>
-      <span style={{ fontSize: 14, flex: 1 }}>{label}</span>
+      <span style={{ fontSize: 22, width: 28, textAlign: 'center' }}>{icon}</span>
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-main)' }}>{label}</div>
+        <div style={{ fontSize: 12, color: 'var(--text-soft)', marginTop: 2 }}>{hint}</div>
+      </div>
       {badge != null && badge > 0 && (
-        <span style={{ background: '#ef4444', color: '#fff', fontSize: 11, fontWeight: 700, borderRadius: 100, padding: '1px 7px', minWidth: 20, textAlign: 'center' }}>
+        <span className="pill" style={{ background: '#ecfeff', color: '#0f766e' }}>
           {badge}
         </span>
       )}
-      <span style={{ color: '#ccc', fontSize: 18 }}>›</span>
+      <span style={{ color: '#94a3b8', fontSize: 18 }}>›</span>
     </Link>
   )
 }
@@ -110,52 +131,80 @@ export default function Dashboard() {
 
   const isAgent = stats && ['agent', 'supervisor', 'admin'].includes(stats.role)
   const cards = [
-    { label: 'Сигналы', value: digest?.total_signals ?? 0, color: '#2563eb', link: '/signals' },
-    { label: 'Внимание', value: digest?.requires_attention ?? 0, color: '#dc2626', link: '/signals?attention=true' },
-    { label: 'Кейсы', value: digest?.critical_cases ?? 0, color: '#0f766e', link: '/cases' },
-    { label: 'Медиа', value: digest?.with_media ?? 0, color: '#0891b2', link: '/signals?kind=photo_report' },
+    { label: 'Сообщения за день', value: digest?.total_signals ?? 0, hint: 'Все сообщения, которые система разобрала по смыслу.', accent: '#1d4ed8', link: '/signals' },
+    { label: 'Нужно внимание', value: digest?.requires_attention ?? 0, hint: 'То, что стоит посмотреть в первую очередь.', accent: '#dc2626', link: '/signals?attention=true' },
+    { label: 'Активные ситуации', value: digest?.critical_cases ?? 0, hint: 'Повторы и связанные обсуждения собраны вместе.', accent: '#0f766e', link: '/cases' },
+    { label: 'С медиа', value: digest?.with_media ?? 0, hint: 'Фото и вложения, которые уже попали в поток.', accent: '#0891b2', link: '/signals?kind=photo_report' },
   ]
 
   return (
-    <div style={{ paddingBottom: 80 }}>
-      <div style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1d4ed8 60%, #0f766e 100%)', padding: '28px 16px 40px', position: 'relative', overflow: 'hidden' }}>
-        <div style={{ position: 'absolute', top: -30, right: -30, width: 130, height: 130, borderRadius: '50%', background: 'rgba(255,255,255,0.07)' }} />
-        <div style={{ position: 'absolute', bottom: -20, left: -20, width: 90, height: 90, borderRadius: '50%', background: 'rgba(255,255,255,0.05)' }} />
-        <div style={{ fontSize: 14, color: 'rgba(255,255,255,0.7)', marginBottom: 2 }}>Здравствуйте,</div>
-        <div style={{ fontSize: 24, fontWeight: 700, color: '#fff', marginBottom: 10 }}>
-          {user?.first_name ?? 'Команда'} 
+    <div className="app-shell">
+      <div
+        style={{
+          padding: '24px 14px 26px',
+          background: 'linear-gradient(135deg, #0f172a 0%, #1d4ed8 55%, #0f766e 100%)',
+          color: '#fff',
+          position: 'relative',
+          overflow: 'hidden',
+        }}
+      >
+        <div style={{ position: 'absolute', top: -24, right: -20, width: 140, height: 140, borderRadius: '50%', background: 'rgba(255,255,255,0.08)' }} />
+        <div style={{ position: 'absolute', bottom: -32, left: -12, width: 100, height: 100, borderRadius: '50%', background: 'rgba(255,255,255,0.06)' }} />
+        <div style={{ fontSize: 13, opacity: 0.76, marginBottom: 4 }}>Операционный обзор</div>
+        <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.03em', marginBottom: 8 }}>
+          {user?.first_name ?? 'Команда'}
         </div>
-        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.18)', borderRadius: 100, padding: '4px 12px' }}>
-          <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#4ade80' }} />
-          <span style={{ fontSize: 12, color: '#fff', fontWeight: 500 }}>{ROLE_LABEL[stats?.role ?? 'user'] ?? stats?.role}</span>
+        <div style={{ maxWidth: 320, fontSize: 14, lineHeight: 1.45, opacity: 0.92 }}>
+          Система собирает сообщения из топиков, выделяет важное и объединяет похожие обсуждения в понятные ситуации.
+        </div>
+        <div style={{ marginTop: 14, display: 'inline-flex', alignItems: 'center', gap: 8, padding: '6px 12px', borderRadius: 999, background: 'rgba(255,255,255,0.14)' }}>
+          <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#4ade80' }} />
+          <span style={{ fontSize: 12, fontWeight: 700 }}>{ROLE_LABEL[stats?.role ?? 'user'] ?? 'Сотрудник'}</span>
         </div>
       </div>
 
-      <div style={{ padding: '0 12px', marginTop: -22 }}>
+      <div className="screen-section" style={{ marginTop: -18 }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          {cards.map((card) => <StatCard key={card.label} value={card.value} label={card.label} color={card.color} link={card.link} />)}
+          {cards.map((card) => (
+            <StatCard key={card.label} {...card} />
+          ))}
+        </div>
+      </div>
+
+      <div className="screen-section">
+        <div className="glass-card" style={{ padding: 16 }}>
+          <div className="section-title" style={{ fontSize: 17, marginBottom: 6 }}>Как это работает</div>
+          <div className="section-subtitle" style={{ marginBottom: 12 }}>
+            Чтобы интерфейс было проще читать, мы показываем поток в трех понятных слоях.
+          </div>
+          <div style={{ display: 'grid', gap: 10 }}>
+            <StepCard icon="💬" title="Сообщения" text="Каждое сообщение из Telegram попадает в поток и получает краткое резюме." />
+            <StepCard icon="🧩" title="Ситуации" text="Похожие сообщения система объединяет, чтобы не было дублей и шума." />
+            <StepCard icon="✅" title="Задачи" text="Если нужен реальный разбор, ситуация или сообщение может уйти в работу." />
+          </div>
         </div>
       </div>
 
       {signals.length > 0 && (
-        <div style={{ margin: '16px 12px 0' }}>
+        <div className="screen-section">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-            <span style={{ fontSize: 13, fontWeight: 600 }}>Важные сигналы</span>
-            <Link to="/signals?attention=true" style={{ fontSize: 12, color: '#2481cc', textDecoration: 'none' }}>Все →</Link>
+            <span className="section-title" style={{ fontSize: 18 }}>Сейчас важно</span>
+            <Link to="/signals?attention=true" style={{ fontSize: 12, color: '#0f766e', textDecoration: 'none', fontWeight: 700 }}>Весь поток</Link>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {signals.map((signal) => (
-              <Link key={signal.id} to={`/signals/${signal.id}`} style={{ textDecoration: 'none' }}>
-                <div style={{ background: 'var(--tg-theme-secondary-bg-color, #f5f5f5)', borderRadius: 14, padding: '12px 14px', borderLeft: `4px solid ${signal.importance === 'critical' ? '#ef4444' : '#2481cc'}` }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                    <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#999' }}>{signal.kind}</span>
-                    <span style={{ fontSize: 11, color: '#999' }}>{timeAgo(signal.happened_at)}</span>
+              <Link key={signal.id} to={`/signals/${signal.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                <div className="glass-card" style={{ padding: '14px 15px', borderLeft: `4px solid ${getSignalAccent(signal)}` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8 }}>
+                    <span className="pill" style={{ background: '#eff6ff', color: '#1d4ed8' }}>{getSignalKindLabel(signal.kind)}</span>
+                    {signal.has_media && <span className="pill" style={{ background: '#ecfeff', color: '#0f766e' }}>Есть медиа</span>}
+                    <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-soft)' }}>{timeAgo(signal.happened_at)}</span>
                   </div>
-                  <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {signal.summary || signal.body}
+                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-main)', lineHeight: 1.35 }}>
+                    {getReadableSignalTitle(signal)}
                   </div>
-                  <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>
-                    {[signal.store, signal.case_title].filter(Boolean).join(' · ')}
+                  <div style={{ marginTop: 7, fontSize: 13, color: 'var(--text-soft)', lineHeight: 1.45 }}>
+                    {[signal.store, signal.case_title, getRecommendedActionLabel(signal.recommended_action)].filter(Boolean).join(' · ') || 'Без привязки к ситуации'}
                   </div>
                 </div>
               </Link>
@@ -165,17 +214,20 @@ export default function Dashboard() {
       )}
 
       {cases.length > 0 && (
-        <div style={{ margin: '16px 12px 0', background: 'var(--tg-theme-secondary-bg-color, #f5f5f5)', borderRadius: 16, padding: '14px 14px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-            <span style={{ fontSize: 13, fontWeight: 600 }}>Живые кейсы</span>
-            <Link to="/cases" style={{ fontSize: 12, color: '#2481cc', textDecoration: 'none' }}>Открыть →</Link>
+        <div className="screen-section">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+            <span className="section-title" style={{ fontSize: 18 }}>Живые ситуации</span>
+            <Link to="/cases" style={{ fontSize: 12, color: '#0f766e', textDecoration: 'none', fontWeight: 700 }}>Открыть</Link>
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {cases.map((flowCase) => (
               <Link key={flowCase.id} to={`/cases/${flowCase.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
-                <div style={{ background: '#fff', borderRadius: 12, padding: '12px 13px' }}>
-                  <div style={{ fontSize: 13, fontWeight: 600 }}>{flowCase.title}</div>
-                  <div style={{ fontSize: 11, color: '#94a3b8', marginTop: 4 }}>{flowCase.signal_count} сигналов · {timeAgo(flowCase.last_signal_at)}</div>
+                <div className="glass-card" style={{ padding: '15px 15px 14px', borderLeft: `4px solid ${getCaseAccent(flowCase)}` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 6 }}>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-main)' }}>{flowCase.title}</div>
+                    <span className="pill" style={{ background: '#f0fdf4', color: '#0f766e' }}>{flowCase.signal_count}</span>
+                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--text-soft)', lineHeight: 1.45 }}>{getReadableCaseHint(flowCase)}</div>
                 </div>
               </Link>
             ))}
@@ -183,14 +235,15 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div style={{ margin: '16px 12px 0', background: 'var(--tg-theme-secondary-bg-color, #f5f5f5)', borderRadius: 16, overflow: 'hidden' }}>
-        <div style={{ padding: '12px 16px', fontSize: 13, fontWeight: 600, borderBottom: '1px solid rgba(0,0,0,0.06)' }}>
-          Быстрые действия
+      <div className="screen-section">
+        <div className="glass-card" style={{ overflow: 'hidden' }}>
+          <div style={{ padding: '14px 16px', fontSize: 15, fontWeight: 800, color: 'var(--text-main)' }}>Быстрые переходы</div>
+          <ActionRow to="/signals" icon="💬" label="Лента сообщений" hint="Весь поток с фильтрами по типу и важности." badge={digest?.total_signals} />
+          <ActionRow to="/cases" icon="🧩" label="Ситуации" hint="Собранные повторы и длинные обсуждения." badge={digest?.critical_cases} />
+          <ActionRow to="/topics" icon="🗂️" label="Темы Telegram" hint="Все топики группы, которые система уже видит." />
+          {isAgent && <ActionRow to="/requests" icon="📋" label="Рабочие задачи" hint="То, что реально ушло исполнителю в работу." badge={stats?.new} />}
+          <ActionRow to="/my" icon="👤" label="Мои задачи" hint="Назначенное лично вам и история обработки." />
         </div>
-        <ActionRow to="/signals" icon="🤖" label="Лента сигналов" badge={digest?.total_signals} />
-        <ActionRow to="/cases" icon="🗂️" label="AI-кейсы" badge={digest?.critical_cases} />
-        {isAgent && <ActionRow to="/requests" icon="📋" label="Теневые заявки" badge={stats?.new} />}
-        <ActionRow to="/my" icon="👤" label="Мои заявки" />
       </div>
     </div>
   )

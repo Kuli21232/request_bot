@@ -2,13 +2,19 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { getSignal, type FlowSignalDetail } from '../api/client'
 import { Loader } from '../components/Loader'
+import {
+  getImportanceLabel,
+  getReadableSignalTitle,
+  getRecommendedActionLabel,
+  getSignalKindLabel,
+} from '../utils/flow'
 
 function Field({ label, value }: { label: string; value?: string | number | null }) {
   if (value == null || value === '') return null
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-      <div style={{ fontSize: 12, color: '#94a3b8' }}>{label}</div>
-      <div style={{ fontSize: 14, color: 'var(--tg-theme-text-color, #0f172a)' }}>{value}</div>
+      <div style={{ fontSize: 12, color: 'var(--text-soft)' }}>{label}</div>
+      <div style={{ fontSize: 14, color: 'var(--text-main)', lineHeight: 1.45 }}>{value}</div>
     </div>
   )
 }
@@ -31,48 +37,64 @@ export default function SignalDetail() {
   }
 
   if (!signal) {
-    return <div style={{ padding: 20, color: '#94a3b8' }}>Сигнал не найден</div>
+    return <div style={{ padding: 20, color: 'var(--text-soft)' }}>Сообщение не найдено</div>
   }
 
   return (
-    <div style={{ padding: '14px 12px 88px' }}>
-      <div style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1d4ed8 100%)', color: '#fff', borderRadius: 18, padding: '18px 16px', marginBottom: 14 }}>
-        <div style={{ fontSize: 12, opacity: 0.75, marginBottom: 6, textTransform: 'uppercase' }}>{signal.kind}</div>
-        <div style={{ fontSize: 20, fontWeight: 700, lineHeight: 1.2 }}>{signal.summary || 'Сигнал потока'}</div>
-        <div style={{ marginTop: 10, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          {signal.store && <span style={{ fontSize: 12, background: 'rgba(255,255,255,0.14)', borderRadius: 100, padding: '4px 10px' }}>{signal.store}</span>}
-          {signal.case_title && <span style={{ fontSize: 12, background: 'rgba(255,255,255,0.14)', borderRadius: 100, padding: '4px 10px' }}>{signal.case_title}</span>}
-          {signal.recommended_action && <span style={{ fontSize: 12, background: 'rgba(255,255,255,0.14)', borderRadius: 100, padding: '4px 10px' }}>{signal.recommended_action}</span>}
+    <div className="app-shell">
+      <div className="screen-section" style={{ marginTop: 12 }}>
+        <div
+          className="glass-card"
+          style={{
+            padding: '18px 16px',
+            background: 'linear-gradient(135deg, #0f172a 0%, #1d4ed8 70%, #0f766e 100%)',
+            color: '#fff',
+          }}
+        >
+          <div className="pill" style={{ background: 'rgba(255,255,255,0.14)', color: '#fff', marginBottom: 10 }}>
+            {getSignalKindLabel(signal.kind)}
+          </div>
+          <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.2 }}>{getReadableSignalTitle(signal)}</div>
+          <div style={{ marginTop: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {signal.store && <span className="pill" style={{ background: 'rgba(255,255,255,0.14)', color: '#fff' }}>{signal.store}</span>}
+            {signal.case_title && <span className="pill" style={{ background: 'rgba(255,255,255,0.14)', color: '#fff' }}>{signal.case_title}</span>}
+            {signal.recommended_action && <span className="pill" style={{ background: 'rgba(255,255,255,0.14)', color: '#fff' }}>{getRecommendedActionLabel(signal.recommended_action)}</span>}
+          </div>
         </div>
       </div>
 
-      <div style={{ display: 'grid', gap: 12 }}>
-        <section style={{ background: 'var(--tg-theme-secondary-bg-color, #f8fafc)', borderRadius: 16, padding: 14 }}>
-          <div style={{ fontSize: 13, color: '#64748b', marginBottom: 8 }}>Оригинальное сообщение</div>
-          <div style={{ fontSize: 15, whiteSpace: 'pre-wrap', lineHeight: 1.45 }}>{signal.body}</div>
+      <div className="screen-section">
+        <section className="glass-card" style={{ padding: 16 }}>
+          <div className="section-title" style={{ fontSize: 17, marginBottom: 8 }}>Что написал человек</div>
+          <div style={{ fontSize: 15, whiteSpace: 'pre-wrap', lineHeight: 1.55, color: 'var(--text-main)' }}>{signal.body}</div>
         </section>
+      </div>
 
-        <section style={{ background: 'var(--tg-theme-secondary-bg-color, #f8fafc)', borderRadius: 16, padding: 14 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 10 }}>AI-разбор</div>
-          <div style={{ display: 'grid', gap: 12 }}>
-            <Field label="Важность" value={signal.importance} />
-            <Field label="Действие" value={signal.actionability} />
-            <Field label="Топик" value={signal.topic_label} />
+      <div className="screen-section">
+        <section className="glass-card" style={{ padding: 16 }}>
+          <div className="section-title" style={{ fontSize: 17, marginBottom: 10 }}>Как система это поняла</div>
+          <div style={{ display: 'grid', gap: 14 }}>
+            <Field label="Тип сообщения" value={getSignalKindLabel(signal.kind)} />
+            <Field label="Оценка важности" value={getImportanceLabel(signal.importance)} />
+            <Field label="Что делать дальше" value={getRecommendedActionLabel(signal.recommended_action) || 'Пока просто наблюдать'} />
+            <Field label="Тема Telegram" value={signal.topic_label} />
             <Field label="Отдел" value={signal.department_name} />
-            <Field label="Рекомендация" value={signal.recommended_action} />
-            <Field label="Черновая заявка" value={signal.request_ticket} />
+            <Field label="Рабочая задача" value={signal.request_ticket} />
           </div>
         </section>
+      </div>
 
-        {signal.case_id && (
+      {signal.case_id && (
+        <div className="screen-section">
           <Link to={`/cases/${signal.case_id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
-            <section style={{ background: '#ecfeff', borderRadius: 16, padding: 14, border: '1px solid #a5f3fc' }}>
-              <div style={{ fontSize: 12, color: '#0f766e', marginBottom: 6 }}>Связанный кейс</div>
-              <div style={{ fontSize: 16, fontWeight: 700 }}>{signal.case_title}</div>
+            <section className="glass-card" style={{ padding: 16, border: '1px solid rgba(15,118,110,0.18)', background: 'linear-gradient(180deg, rgba(236,253,245,0.92), rgba(255,255,255,0.94))' }}>
+              <div style={{ fontSize: 12, color: '#0f766e', marginBottom: 6, fontWeight: 700 }}>Сообщение уже привязано</div>
+              <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--text-main)' }}>{signal.case_title}</div>
+              <div style={{ fontSize: 13, color: 'var(--text-soft)', marginTop: 6 }}>Открыть общую ситуацию и посмотреть похожие сообщения.</div>
             </section>
           </Link>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   )
 }

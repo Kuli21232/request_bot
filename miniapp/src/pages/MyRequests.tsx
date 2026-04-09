@@ -2,14 +2,14 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getMyRequests } from '../api/client'
 import type { Request } from '../api/client'
-import { StatusBadge, PriorityBadge, STATUS_DOT_COLOR } from '../components/StatusBadge'
 import { Loader } from '../components/Loader'
+import { PriorityBadge, STATUS_DOT_COLOR, StatusBadge } from '../components/StatusBadge'
 
 const STATUS_FILTERS = [
   { key: '', label: 'Все' },
-  { key: 'in_progress', label: '🟡 В работе' },
-  { key: 'resolved', label: '✅ Решённые' },
-  { key: 'new', label: '🆕 Новые' },
+  { key: 'in_progress', label: 'В работе' },
+  { key: 'resolved', label: 'Решенные' },
+  { key: 'new', label: 'Новые' },
 ]
 
 function timeAgo(iso: string) {
@@ -31,83 +31,67 @@ export default function MyRequests() {
     setLoading(true)
     const params = statusFilter ? { status: statusFilter } : undefined
     getMyRequests(params)
-      .then(d => setRequests(d.items ?? d ?? []))
+      .then((data) => setRequests(data.items ?? data ?? []))
       .catch(() => setRequests([]))
       .finally(() => setLoading(false))
   }, [statusFilter])
 
   return (
-    <div style={{ paddingBottom: 80 }}>
-      {/* Header */}
-      <div style={{
-        background: 'linear-gradient(135deg, #7c3aed, #9333ea)',
-        padding: '24px 16px 20px',
-      }}>
-        <div style={{ fontSize: 22, fontWeight: 700, color: '#fff' }}>👤 Мои заявки</div>
-        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)', marginTop: 4 }}>
-          {requests.length} заявок
+    <div className="app-shell">
+      <div className="screen-section" style={{ marginTop: 12 }}>
+        <div className="glass-card" style={{ padding: '16px 16px 14px' }}>
+          <div className="section-title" style={{ marginBottom: 4 }}>Мои задачи</div>
+          <div className="section-subtitle" style={{ marginBottom: 12 }}>
+            Здесь только то, что уже ушло в работу и назначено вам. Если ничего нет, значит поток пока не требовал отдельной задачи.
+          </div>
+          <div style={{ display: 'flex', gap: 6, overflowX: 'auto' }} className="scrollbar-hide">
+            {STATUS_FILTERS.map((filter) => (
+              <button
+                key={filter.key}
+                onClick={() => setStatusFilter(filter.key)}
+                className={`filter-chip ${statusFilter === filter.key ? 'active' : ''}`}
+              >
+                {filter.label}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
-
-      {/* Filters */}
-      <div style={{ padding: '10px 12px', display: 'flex', gap: 6, overflowX: 'auto' }} className="scrollbar-hide">
-        {STATUS_FILTERS.map(f => (
-          <button key={f.key} onClick={() => setStatusFilter(f.key)} style={{
-            flexShrink: 0, padding: '5px 12px', borderRadius: 100, border: 'none', cursor: 'pointer',
-            fontSize: 13, fontWeight: 500,
-            background: statusFilter === f.key ? '#7c3aed' : 'var(--tg-theme-secondary-bg-color, #f0f0f0)',
-            color: statusFilter === f.key ? '#fff' : 'var(--tg-theme-text-color, #555)',
-          }}>
-            {f.label}
-          </button>
-        ))}
       </div>
 
       {loading ? (
         <div style={{ padding: '40px 0' }}><Loader /></div>
       ) : requests.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '60px 20px', color: '#999' }}>
-          <div style={{ fontSize: 48, marginBottom: 12 }}>📭</div>
-          <div style={{ fontSize: 16, fontWeight: 500 }}>Заявок нет</div>
-          <div style={{ fontSize: 13, marginTop: 6 }}>
-            Напишите в нужный топик группы, чтобы создать заявку
+        <div className="screen-section">
+          <div className="glass-card" style={{ textAlign: 'center', padding: '56px 22px', color: 'var(--text-soft)' }}>
+            <div style={{ fontSize: 44, marginBottom: 10 }}>✅</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text-main)' }}>Личных задач сейчас нет</div>
+            <div style={{ fontSize: 13, lineHeight: 1.45, marginTop: 8 }}>
+              Это нормально: сообщения и ситуации продолжают собираться в потоке, но лично вам пока ничего не назначено.
+            </div>
           </div>
         </div>
       ) : (
-        <div style={{ padding: '4px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {requests.map(req => (
+        <div className="screen-section" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {requests.map((req) => (
             <Link key={req.id} to={`/requests/${req.id}`} style={{ textDecoration: 'none' }}>
-              <div style={{
-                background: 'var(--tg-theme-secondary-bg-color, #f5f5f5)',
-                borderRadius: 14, padding: '14px',
-                borderLeft: `4px solid ${STATUS_DOT_COLOR[req.status] ?? '#ddd'}`,
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 6 }}>
-                  <span style={{ fontSize: 11, fontFamily: 'monospace', color: '#999' }}>{req.ticket_number}</span>
+              <div className="glass-card" style={{ padding: '14px 15px', borderLeft: `4px solid ${STATUS_DOT_COLOR[req.status] ?? '#cbd5e1'}` }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 7 }}>
+                  <span style={{ fontSize: 11, fontFamily: 'monospace', color: 'var(--text-soft)' }}>{req.ticket_number}</span>
                   <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                    {req.sla_breached && <span style={{ fontSize: 11, color: '#ef4444' }}>⚠️ SLA</span>}
+                    {req.sla_breached && <span style={{ fontSize: 11, color: '#ef4444', fontWeight: 700 }}>SLA</span>}
                     <StatusBadge status={req.status} showDot />
                   </div>
                 </div>
-                <div style={{ fontSize: 14, fontWeight: 500, lineHeight: 1.4, marginBottom: 8, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                <div style={{ fontSize: 15, fontWeight: 700, lineHeight: 1.4, marginBottom: 8, color: 'var(--text-main)' }}>
                   {req.subject || req.body}
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   <PriorityBadge priority={req.priority} />
-                  <span style={{ marginLeft: 'auto', fontSize: 11, color: '#bbb' }}>
-                    {timeAgo(req.created_at)}
-                  </span>
+                  {req.department_name && (
+                    <span className="pill" style={{ background: '#f5f3ff', color: '#6d28d9' }}>{req.department_name}</span>
+                  )}
+                  <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-soft)' }}>{timeAgo(req.created_at)}</span>
                 </div>
-                {req.assigned_to_name && (
-                  <div style={{ marginTop: 6, fontSize: 12, color: '#6b7280' }}>
-                    👤 {req.assigned_to_name}
-                  </div>
-                )}
-                {req.satisfaction_score && (
-                  <div style={{ marginTop: 4, fontSize: 12, color: '#f59e0b' }}>
-                    {'⭐'.repeat(req.satisfaction_score)} Вы оценили
-                  </div>
-                )}
               </div>
             </Link>
           ))}

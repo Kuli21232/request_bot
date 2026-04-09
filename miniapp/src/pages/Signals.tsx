@@ -3,11 +3,18 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { getSignals, type FlowSignal } from '../api/client'
 import { Loader } from '../components/Loader'
 import { haptic } from '../telegram'
+import {
+  getImportanceLabel,
+  getReadableSignalTitle,
+  getRecommendedActionLabel,
+  getSignalAccent,
+  getSignalKindLabel,
+} from '../utils/flow'
 
 const FILTERS = [
   { key: '', label: 'Все' },
   { key: 'problem', label: 'Проблемы' },
-  { key: 'photo_report', label: 'Фото/Видео' },
+  { key: 'photo_report', label: 'Фото и видео' },
   { key: 'delivery', label: 'Доставка' },
   { key: 'finance', label: 'Финансы' },
   { key: 'chat/noise', label: 'Шум' },
@@ -21,14 +28,6 @@ function timeAgo(iso: string) {
   const hrs = Math.floor(mins / 60)
   if (hrs < 24) return `${hrs} ч`
   return `${Math.floor(hrs / 24)} д`
-}
-
-function badgeColor(signal: FlowSignal) {
-  if (signal.is_noise) return '#64748b'
-  if (signal.importance === 'critical') return '#dc2626'
-  if (signal.importance === 'high') return '#ea580c'
-  if (signal.has_media) return '#0f766e'
-  return '#2563eb'
 }
 
 export default function Signals() {
@@ -92,92 +91,82 @@ export default function Signals() {
   }
 
   return (
-    <div style={{ paddingBottom: 80 }}>
-      <div style={{ position: 'sticky', top: 0, zIndex: 10, background: 'var(--tg-theme-bg-color, #fff)', padding: '12px 12px 8px', boxShadow: '0 1px 8px rgba(0,0,0,0.06)' }}>
-        <div style={{ fontSize: 19, fontWeight: 700, marginBottom: 6 }}>Поток сигналов</div>
-        <div style={{ fontSize: 12, color: 'var(--tg-theme-hint-color, #999)', marginBottom: 10 }}>
-          AI сортирует сообщения, медиа и повторы в живой поток
-        </div>
-        <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8 }} className="scrollbar-hide">
-          {FILTERS.map((filter) => (
-            <button
-              key={filter.key}
-              onClick={() => setFilter(filter.key)}
-              style={{
-                flexShrink: 0,
-                padding: '6px 12px',
-                borderRadius: 100,
-                border: 'none',
-                cursor: 'pointer',
-                fontSize: 12,
-                fontWeight: 600,
-                background: kind === filter.key ? '#2563eb' : 'var(--tg-theme-secondary-bg-color, #f0f0f0)',
-                color: kind === filter.key ? '#fff' : 'var(--tg-theme-text-color, #555)',
-              }}
-            >
-              {filter.label}
-            </button>
-          ))}
-          <button
-            onClick={toggleAttention}
-            style={{
-              flexShrink: 0,
-              padding: '6px 12px',
-              borderRadius: 100,
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: 12,
-              fontWeight: 600,
-              background: requiresAttention ? '#dc2626' : 'var(--tg-theme-secondary-bg-color, #f0f0f0)',
-              color: requiresAttention ? '#fff' : 'var(--tg-theme-text-color, #555)',
-            }}
-          >
-            Критичное
-          </button>
-        </div>
-        {!loading && (
-          <div style={{ fontSize: 12, color: '#94a3b8' }}>
-            {items.length} из {total} сигналов
+    <div className="app-shell">
+      <div className="screen-section" style={{ marginTop: 12 }}>
+        <div className="glass-card" style={{ padding: '16px 16px 14px', position: 'sticky', top: 10, zIndex: 10 }}>
+          <div className="section-title" style={{ marginBottom: 4 }}>Лента сообщений</div>
+          <div className="section-subtitle" style={{ marginBottom: 12 }}>
+            Здесь все входящие сообщения из топиков. Система показывает краткий смысл, важность и связь с общей ситуацией.
           </div>
-        )}
+          <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 8 }} className="scrollbar-hide">
+            {FILTERS.map((filter) => (
+              <button
+                key={filter.key}
+                onClick={() => setFilter(filter.key)}
+                className={`filter-chip ${kind === filter.key ? 'active' : ''}`}
+              >
+                {filter.label}
+              </button>
+            ))}
+            <button
+              onClick={toggleAttention}
+              className={`filter-chip ${requiresAttention ? 'active' : ''}`}
+              style={requiresAttention ? { background: 'linear-gradient(135deg, #dc2626, #ea580c)' } : undefined}
+            >
+              Срочно
+            </button>
+          </div>
+          {!loading && (
+            <div style={{ fontSize: 12, color: 'var(--text-soft)' }}>
+              Показано {items.length} из {total}
+            </div>
+          )}
+        </div>
       </div>
 
       {loading ? (
         <div style={{ padding: '40px 0' }}><Loader /></div>
       ) : items.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '64px 20px', color: '#94a3b8' }}>
-          <div style={{ fontSize: 42, marginBottom: 10 }}>📭</div>
-          Сигналов по этому фильтру пока нет
+        <div className="screen-section">
+          <div className="glass-card" style={{ textAlign: 'center', padding: '56px 20px', color: 'var(--text-soft)' }}>
+            <div style={{ fontSize: 42, marginBottom: 10 }}>💬</div>
+            По этому фильтру сообщений пока нет
+          </div>
         </div>
       ) : (
-        <div style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div className="screen-section" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           {items.map((signal) => (
             <Link key={signal.id} to={`/signals/${signal.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
-              <div style={{ background: 'var(--tg-theme-secondary-bg-color, #f5f5f5)', borderRadius: 16, padding: '13px 14px', borderLeft: `4px solid ${badgeColor(signal)}` }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: 11, color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>{signal.kind}</span>
+              <div className="glass-card" style={{ padding: '14px 15px', borderLeft: `4px solid ${getSignalAccent(signal)}` }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7, flexWrap: 'wrap' }}>
+                  <span className="pill" style={{ background: '#eff6ff', color: '#1d4ed8' }}>{getSignalKindLabel(signal.kind)}</span>
                   {signal.case_title && (
-                    <span style={{ fontSize: 11, color: '#0f766e', background: '#dcfce7', borderRadius: 100, padding: '2px 8px' }}>
-                      Кейс: {signal.case_title}
+                    <span className="pill" style={{ background: '#ecfdf5', color: '#0f766e' }}>
+                      Ситуация: {signal.case_title}
                     </span>
                   )}
                   {signal.has_media && (
-                    <span style={{ fontSize: 11, color: '#155e75', background: '#cffafe', borderRadius: 100, padding: '2px 8px' }}>
+                    <span className="pill" style={{ background: '#ecfeff', color: '#155e75' }}>
                       Медиа
                     </span>
                   )}
-                  <span style={{ marginLeft: 'auto', fontSize: 11, color: '#94a3b8' }}>{timeAgo(signal.happened_at)}</span>
+                  <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--text-soft)' }}>{timeAgo(signal.happened_at)}</span>
                 </div>
-                <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>
-                  {signal.summary || signal.body}
+                <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text-main)', marginBottom: 6, lineHeight: 1.35 }}>
+                  {getReadableSignalTitle(signal)}
                 </div>
-                <div style={{ fontSize: 13, color: '#64748b', marginBottom: 8, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
+                <div style={{ fontSize: 13, color: 'var(--text-soft)', marginBottom: 9, lineHeight: 1.45, overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
                   {signal.body}
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
-                  {signal.store && <span style={{ fontSize: 11, color: '#475569', background: '#e2e8f0', borderRadius: 100, padding: '2px 8px' }}>{signal.store}</span>}
-                  {signal.department_name && <span style={{ fontSize: 11, color: '#7c3aed', background: '#ede9fe', borderRadius: 100, padding: '2px 8px' }}>{signal.department_name}</span>}
-                  {signal.recommended_action && <span style={{ fontSize: 11, color: '#9a3412', background: '#ffedd5', borderRadius: 100, padding: '2px 8px' }}>{signal.recommended_action}</span>}
+                  {signal.store && <span className="pill" style={{ background: '#f1f5f9', color: '#334155' }}>{signal.store}</span>}
+                  {signal.department_name && <span className="pill" style={{ background: '#f5f3ff', color: '#6d28d9' }}>{signal.department_name}</span>}
+                  <span className="pill" style={{ background: '#fff7ed', color: '#9a3412' }}>{getImportanceLabel(signal.importance)}</span>
+                  {signal.recommended_action && (
+                    <span className="pill" style={{ background: '#fefce8', color: '#854d0e' }}>
+                      {getRecommendedActionLabel(signal.recommended_action)}
+                    </span>
+                  )}
                 </div>
               </div>
             </Link>
@@ -187,9 +176,10 @@ export default function Signals() {
             <button
               onClick={loadMore}
               disabled={loadingMore}
-              style={{ width: '100%', padding: '12px', borderRadius: 12, border: 'none', background: 'var(--tg-theme-secondary-bg-color, #f0f0f0)', color: '#2563eb', fontSize: 14, fontWeight: 600, cursor: 'pointer' }}
+              className="glass-card"
+              style={{ width: '100%', padding: '13px', borderRadius: 16, border: 'none', color: '#0f766e', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}
             >
-              {loadingMore ? 'Загрузка...' : `Показать ещё (${total - items.length})`}
+              {loadingMore ? 'Загрузка...' : `Показать еще (${total - items.length})`}
             </button>
           )}
         </div>

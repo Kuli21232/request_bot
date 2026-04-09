@@ -1,18 +1,18 @@
-import { useEffect, useState, Component, type ReactNode, type ErrorInfo } from 'react'
-import { BrowserRouter, Routes, Route } from 'react-router-dom'
-import WebApp from './telegram'
+import { Component, type ErrorInfo, type ReactNode, useEffect, useState } from 'react'
+import { BrowserRouter, Route, Routes } from 'react-router-dom'
 import { authTelegram } from './api/client'
 import { BottomNav } from './components/BottomNav'
 import { Loader } from './components/Loader'
-import Dashboard from './pages/Dashboard'
-import Signals from './pages/Signals'
-import SignalDetail from './pages/SignalDetail'
-import Cases from './pages/Cases'
 import CaseDetail from './pages/CaseDetail'
-import Topics from './pages/Topics'
-import RequestList from './pages/RequestList'
-import RequestDetail from './pages/RequestDetail'
+import Cases from './pages/Cases'
+import Dashboard from './pages/Dashboard'
 import MyRequests from './pages/MyRequests'
+import RequestDetail from './pages/RequestDetail'
+import RequestList from './pages/RequestList'
+import SignalDetail from './pages/SignalDetail'
+import Signals from './pages/Signals'
+import Topics from './pages/Topics'
+import WebApp from './telegram'
 import './index.css'
 
 class ErrorBoundary extends Component<{ children: ReactNode }, { error: string }> {
@@ -26,7 +26,18 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { error: string }
   render() {
     if (this.state.error) {
       return (
-        <div style={{ padding: 16, fontFamily: 'monospace', fontSize: 12, color: '#ff4444', background: '#1a1a1a', minHeight: '100vh', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+        <div
+          style={{
+            padding: 16,
+            fontFamily: 'monospace',
+            fontSize: 12,
+            color: '#ff4444',
+            background: '#1a1a1a',
+            minHeight: '100vh',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-all',
+          }}
+        >
           <div style={{ color: '#ff8888', fontSize: 14, fontWeight: 'bold', marginBottom: 8 }}>React Error</div>
           {this.state.error}
         </div>
@@ -82,7 +93,7 @@ export default function App() {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
         <Loader />
-        <div style={{ marginTop: 12, fontSize: 13, color: 'var(--tg-theme-hint-color, #999)' }}>Загрузка...</div>
+        <div style={{ marginTop: 12, fontSize: 13, color: 'var(--text-soft)' }}>Загрузка мини-приложения...</div>
       </div>
     )
   }
@@ -96,8 +107,8 @@ export default function App() {
           </div>
         )}
         {debugInfo === 'browser-mode' && (
-          <div style={{ background: '#fef3c7', color: '#92400e', fontSize: 12, textAlign: 'center', padding: '4px 16px' }}>
-            Открыто вне Telegram, авторизация недоступна
+          <div style={{ background: '#fef3c7', color: '#92400e', fontSize: 12, textAlign: 'center', padding: '6px 16px' }}>
+            Приложение открыто вне Telegram, поэтому вход выполнен в режиме просмотра.
           </div>
         )}
         <Routes>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getTopics, type Topic } from '../api/client'
 import { Loader } from '../components/Loader'
+import { getSignalKindLabel, getTopicKindLabel, getTopicSummary } from '../utils/flow'
 
 export default function Topics() {
   const [topics, setTopics] = useState<Topic[]>([])
@@ -17,25 +18,37 @@ export default function Topics() {
   }
 
   return (
-    <div style={{ padding: '12px 12px 88px' }}>
-      <div style={{ marginBottom: 14 }}>
-        <div style={{ fontSize: 20, fontWeight: 700, marginBottom: 4 }}>Топики</div>
-        <div style={{ fontSize: 12, color: '#94a3b8' }}>AI видит их автоматически и строит профиль поведения</div>
+    <div className="app-shell">
+      <div className="screen-section" style={{ marginTop: 12 }}>
+        <div className="glass-card" style={{ padding: '16px 16px 14px' }}>
+          <div className="section-title" style={{ marginBottom: 4 }}>Темы Telegram</div>
+          <div className="section-subtitle">
+            Все топики группы появляются здесь автоматически. Система смотрит, о чем в них чаще пишут, и подстраивает разбор потока.
+          </div>
+        </div>
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+
+      <div className="screen-section" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {topics.map((topic) => (
-          <div key={topic.id} style={{ background: 'var(--tg-theme-secondary-bg-color, #f5f5f5)', borderRadius: 16, padding: '14px 15px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 6 }}>
-              <div style={{ fontSize: 16, fontWeight: 700 }}>{topic.icon_emoji || '🧵'} {topic.title}</div>
-              <div style={{ fontSize: 11, color: '#64748b' }}>{topic.topic_kind}</div>
+          <div key={topic.id} className="glass-card" style={{ padding: '15px 15px 14px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, marginBottom: 7 }}>
+              <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--text-main)' }}>
+                {topic.icon_emoji || '🧵'} {topic.title}
+              </div>
+              <span className="pill" style={{ background: '#eff6ff', color: '#1d4ed8' }}>{getTopicKindLabel(topic.topic_kind)}</span>
             </div>
-            <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>
-              thread #{topic.telegram_topic_id} · сообщений {topic.message_count} · сигналов {topic.signal_count}
+            <div style={{ fontSize: 13, color: 'var(--text-soft)', lineHeight: 1.45, marginBottom: 10 }}>
+              {getTopicSummary(topic)}
             </div>
-            {topic.profile && (
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+              <span className="pill" style={{ background: '#f1f5f9', color: '#334155' }}>Сообщений: {topic.message_count}</span>
+              <span className="pill" style={{ background: '#ecfdf5', color: '#0f766e' }}>Разобрано: {topic.signal_count}</span>
+              <span className="pill" style={{ background: '#ecfeff', color: '#155e75' }}>Медиа: {topic.media_count}</span>
+            </div>
+            {topic.profile && topic.profile.allowed_signal_types.length > 0 && (
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {topic.profile.allowed_signal_types.slice(0, 4).map((item) => (
-                  <span key={item} style={{ fontSize: 11, background: '#e2e8f0', color: '#334155', borderRadius: 100, padding: '2px 8px' }}>{item}</span>
+                  <span key={item} className="pill" style={{ background: '#fff7ed', color: '#9a3412' }}>{getSignalKindLabel(item)}</span>
                 ))}
               </div>
             )}
