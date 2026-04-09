@@ -199,11 +199,13 @@ export interface TopicProfile {
   media_policy: Record<string, any>
   confidence_threshold: number
   auto_learn_enabled: boolean
+  automation?: TopicAutomation
 }
 
 export interface Topic {
   id: number
   group_id: number
+  group_title?: string
   telegram_topic_id: number
   title: string
   icon_emoji?: string
@@ -215,6 +217,46 @@ export interface Topic {
   last_seen_at?: string
   profile_version: number
   profile?: TopicProfile
+}
+
+export interface TopicAutomation {
+  priority?: string
+  recommended_action?: string
+  summary?: string
+  attention_count?: number
+  open_case_count?: number
+  critical_case_count?: number
+  dominant_kind?: string
+  top_stores?: string[]
+  signal_examples?: string[]
+  case_titles?: string[]
+  last_signal_at?: string
+}
+
+export interface TopicSection {
+  topic_id: number
+  topic_title: string
+  group_id: number
+  group_title?: string
+  icon_emoji?: string
+  topic_kind: string
+  priority: string
+  score: number
+  reasons: string[]
+  stats: {
+    signal_count: number
+    attention_count: number
+    media_signal_count: number
+    critical_case_count: number
+    open_case_count: number
+    last_signal_at?: string
+    message_count: number
+    media_count: number
+  }
+  profile_summary?: string
+  automation?: TopicAutomation
+  signals: FlowSignal[]
+  cases: FlowCase[]
 }
 
 export const authTelegram = async (initData: string): Promise<{ access_token: string }> => {
@@ -315,6 +357,11 @@ export const getCase = async (id: number): Promise<FlowCaseDetail> => {
 
 export const getDigestOverview = async () => {
   const res = await api.get('/api/v1/flow/digests/overview')
+  return res.data
+}
+
+export const getTopicSections = async (params?: Record<string, string | number | boolean>) => {
+  const res = await api.get<{ items: TopicSection[]; total: number }>('/api/v1/flow/topic-sections', { params })
   return res.data
 }
 

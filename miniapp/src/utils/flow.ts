@@ -1,4 +1,4 @@
-import type { FlowCase, FlowSignal, Topic } from '../api/client'
+import type { FlowCase, FlowSignal, Topic, TopicSection } from '../api/client'
 
 const SIGNAL_KIND_LABELS: Record<string, string> = {
   problem: 'Проблема',
@@ -31,6 +31,9 @@ const ACTION_LABELS: Record<string, string> = {
   suggest_reply: 'Нужен ответ',
   route_to_topic: 'Перенаправить',
   shadow_request: 'Отдать в работу',
+  review_topic_queue: 'Разобрать топик',
+  watch_topic: 'Наблюдать',
+  collect_context: 'Собрать контекст',
 }
 
 const CASE_STATUS_LABELS: Record<string, string> = {
@@ -50,9 +53,14 @@ const CASE_PRIORITY_LABELS: Record<string, string> = {
 
 const TOPIC_KIND_LABELS: Record<string, string> = {
   operational: 'Рабочий топик',
+  operations: 'Операционный поток',
   finance: 'Финансовый топик',
   reporting: 'Отчетность',
   support: 'Поддержка',
+  compliance: 'Контроль',
+  logistics: 'Логистика',
+  incident: 'Инциденты',
+  mixed: 'Смешанный поток',
 }
 
 export function getSignalKindLabel(kind?: string) {
@@ -100,6 +108,7 @@ export function getCaseAccent(flowCase: Pick<FlowCase, 'is_critical' | 'priority
 }
 
 export function getTopicSummary(topic: Topic) {
+  if (topic.profile?.automation?.summary) return topic.profile.automation.summary
   if (topic.profile?.profile_summary) return topic.profile.profile_summary
   if (topic.signal_count > 0) return `В потоке уже разобрано ${topic.signal_count} сообщений.`
   return 'Новый топик, система пока собирает контекст.'
@@ -115,4 +124,17 @@ export function getReadableCaseHint(flowCase: Pick<FlowCase, 'summary' | 'signal
     return `Затронуто точек: ${flowCase.stores_affected.length}`
   }
   return `Сообщений в ситуации: ${flowCase.signal_count}`
+}
+
+export function getSectionAccent(section: Pick<TopicSection, 'priority'>) {
+  if (section.priority === 'critical') return '#dc2626'
+  if (section.priority === 'high') return '#ea580c'
+  if (section.priority === 'normal') return '#0f766e'
+  return '#64748b'
+}
+
+export function getTopicSectionSummary(section: TopicSection) {
+  if (section.automation?.summary) return section.automation.summary
+  if (section.profile_summary) return section.profile_summary
+  return `В разделе ${section.stats.signal_count} сигналов и ${section.stats.open_case_count} активных ситуаций.`
 }
