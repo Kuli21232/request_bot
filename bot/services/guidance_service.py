@@ -127,10 +127,14 @@ class GuidanceService:
         )
 
     def _build_topic_first_answer(self, question: str, topic_matches: list) -> str | None:
+        normalized_question = question.lower().replace("ё", "е")
+        system_answer = self._build_system_answer(normalized_question)
+        if system_answer is not None:
+            return system_answer
+
         if not topic_matches:
             return None
 
-        normalized_question = question.lower().replace("ё", "е")
         visible_topics = [topic.title for topic in topic_matches[:3]]
         primary = topic_matches[0]
 
@@ -161,6 +165,25 @@ class GuidanceService:
             topics_text = ", ".join(f"«{title}»" for title in visible_topics)
             return f"По этой теме у вас сейчас вижу такие топики: {topics_text}."
 
+        return None
+
+    @staticmethod
+    def _build_system_answer(normalized_question: str) -> str | None:
+        if any(
+            phrase in normalized_question
+            for phrase in (
+                "как ты фильтруешь",
+                "каким образом ты фильтруешь",
+                "как ты сортируешь",
+                "как работаешь с топиками",
+                "как анализируешь топики",
+            )
+        ):
+            return (
+                "Я смотрю на название топика, текст сообщения, вложения, повторяемость темы и историю похожих сообщений. "
+                "Сначала определяю, что это за сигнал, потом пытаюсь связать его с подходящим топиком и кейсом. "
+                "Если точного правила нет, я лучше скажу об этом прямо, чем придумаю неверный ответ."
+            )
         return None
 
     @staticmethod

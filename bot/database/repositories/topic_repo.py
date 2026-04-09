@@ -131,11 +131,13 @@ class TopicRepository:
                 score += 12
             overlap = len(query_words & title_words)
             score += overlap * 4
+            score += self._fuzzy_word_score(query_words, title_words)
 
             profile_summary = self._normalize_text((topic.profile.profile_summary if topic.profile else "") or "")
             if profile_summary:
                 summary_words = self._split_words(profile_summary)
                 score += len(query_words & summary_words)
+                score += self._fuzzy_word_score(query_words, summary_words, weight=1)
 
             top_tags = []
             if topic.profile and topic.profile.learning_snapshot:
@@ -157,6 +159,20 @@ class TopicRepository:
     @staticmethod
     def _split_words(text: str) -> set[str]:
         return {word for word in re.findall(r"[a-zA-Zа-яА-Я0-9]+", text) if len(word) >= 3}
+
+    @staticmethod
+    def _fuzzy_word_score(query_words: set[str], candidate_words: set[str], *, weight: int = 2) -> int:
+        score = 0
+        for query_word in query_words:
+            for candidate_word in candidate_words:
+                if len(query_word) < 5 or len(candidate_word) < 5:
+                    continue
+                if query_word in candidate_word or candidate_word in query_word:
+                    score += weight
+                    continue
+                if query_word[:5] == candidate_word[:5]:
+                    score += weight
+        return score
 
     async def get_topic(self, topic_id: int) -> TelegramTopic | None:
         result = await self.session.execute(
