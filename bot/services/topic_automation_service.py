@@ -101,7 +101,7 @@ class TopicAutomationService:
                     "topic_id": topic.id,
                     "topic_title": topic.title,
                     "group_id": topic.group_id,
-                    "group_title": topic.group.title if topic.group else None,
+                    "group_title": item.get("group_title"),
                     "icon_emoji": topic.icon_emoji,
                     "topic_kind": topic.topic_kind,
                     "priority": item["priority"],
@@ -231,7 +231,13 @@ class TopicAutomationService:
         ranked_topics: list[dict] = []
         for group in groups:
             active_topics = [topic for topic in group.topics if topic.is_active]
-            ranked_topics.extend(self.engine.sort_topics(active_topics, metrics))
+            ranked_topics.extend(
+                {
+                    **item,
+                    "group_title": group.title,
+                }
+                for item in self.engine.sort_topics(active_topics, metrics)
+            )
 
         ranked_topics.sort(
             key=lambda item: (
