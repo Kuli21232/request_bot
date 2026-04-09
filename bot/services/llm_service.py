@@ -170,7 +170,7 @@ class LLMService:
                 prompt="Ответь одним словом: готов",
                 system="Ты помощник.",
                 temperature=0.1,
-                timeout=12,
+                timeout=max(20, settings.OLLAMA_BACKGROUND_TIMEOUT),
                 max_tokens=8,
             )
         except Exception as exc:

@@ -93,6 +93,8 @@ class GuidanceService:
         if generated:
             return generated
 
+        await self.llm.warmup()
+
         retry_prompt = (
             "Answer in Russian in 2-4 short sentences.\n"
             f"Question: {question}\n"
