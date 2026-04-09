@@ -11,6 +11,8 @@ import RequestDetail from './pages/RequestDetail'
 import RequestList from './pages/RequestList'
 import SignalDetail from './pages/SignalDetail'
 import Signals from './pages/Signals'
+import Team from './pages/Team'
+import TeamProfile from './pages/TeamProfile'
 import Topics from './pages/Topics'
 import WebApp from './telegram'
 import './index.css'
@@ -121,6 +123,8 @@ export default function App() {
           <Route path="/requests" element={<RequestList />} />
           <Route path="/requests/:id" element={<RequestDetail />} />
           <Route path="/my" element={<MyRequests />} />
+          <Route path="/team" element={<Team />} />
+          <Route path="/team/:id" element={<TeamProfile />} />
         </Routes>
         <BottomNav />
       </BrowserRouter>

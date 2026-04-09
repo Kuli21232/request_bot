@@ -29,18 +29,6 @@ async def set_commands(bot: Bot) -> None:
             BotCommand(command="assistant", description="AI-помощник по потоку"),
             BotCommand(command="digest", description="AI-сводка по теме или группе"),
             BotCommand(command="next", description="Что сейчас в приоритете"),
-            BotCommand(command="ask", description="Задать вопрос по базе знаний"),
-            BotCommand(command="guide", description="Найти инструкцию"),
-            BotCommand(command="participants", description="Участники системы"),
-            BotCommand(command="profile", description="Профиль сотрудника"),
-            BotCommand(command="groups", description="Обзор групп и потока"),
-            BotCommand(command="topics", description="AI-сортировка топиков"),
-            BotCommand(command="my", description="Мои задачи"),
-            BotCommand(command="status", description="Статус задачи"),
-            BotCommand(command="watch", description="Подписка на профиль"),
-            BotCommand(command="unwatch", description="Убрать подписку"),
-            BotCommand(command="register_topic", description="Привязать топик к отделу"),
-            BotCommand(command="list_topics", description="Топики текущей группы"),
         ]
     )
 

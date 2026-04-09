@@ -462,10 +462,10 @@ export default function Dashboard() {
             badge={digest?.critical_cases}
           />
           <ActionRow
-            to="/my"
-            icon="👤"
-            label="Мои задачи"
-            hint="То, что закреплено лично за вами."
+            to="/team"
+            icon="👥"
+            label="Команда"
+            hint="Профили сотрудников, комментарии и подписки на обновления."
           />
         </div>
       </div>

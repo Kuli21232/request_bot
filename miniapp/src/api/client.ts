@@ -296,6 +296,32 @@ export interface TopicSection {
   cases: FlowCase[]
 }
 
+export interface ProfileNote {
+  id: number
+  body: string
+  notify_target: boolean
+  author_id?: number
+  author_name?: string
+  created_at?: string
+}
+
+export interface TeamUser {
+  id: number
+  telegram_user_id?: number
+  first_name: string
+  last_name?: string
+  username?: string
+  email?: string
+  role: string
+  is_banned: boolean
+  last_active_at?: string
+  created_at?: string
+  notes_count?: number
+  notes?: ProfileNote[]
+  is_watching?: boolean
+  watchers_count?: number
+}
+
 export const authTelegram = async (initData: string): Promise<{ access_token: string }> => {
   const res = await axios.post(`${API_URL}/api/v1/auth/telegram`, { init_data: initData })
   const token = res.data.access_token ?? res.data.token
@@ -425,6 +451,31 @@ export const getDepartments = async (): Promise<Department[]> => {
 export const getAgents = async (): Promise<Agent[]> => {
   const res = await api.get('/api/v1/users', { params: { role: 'agent,supervisor,admin' } })
   return res.data ?? []
+}
+
+export const getTeamUsers = async (params?: Record<string, string | number>) => {
+  const res = await api.get<TeamUser[]>('/api/v1/users', { params })
+  return res.data ?? []
+}
+
+export const getTeamUser = async (id: number): Promise<TeamUser> => {
+  const res = await api.get(`/api/v1/users/${id}`)
+  return res.data
+}
+
+export const addProfileNote = async (id: number, body: string, notifyTarget = false): Promise<ProfileNote> => {
+  const res = await api.post(`/api/v1/users/${id}/notes`, { body, notify_target: notifyTarget })
+  return res.data
+}
+
+export const watchProfile = async (id: number) => {
+  const res = await api.post(`/api/v1/users/${id}/watch`)
+  return res.data
+}
+
+export const unwatchProfile = async (id: number) => {
+  const res = await api.delete(`/api/v1/users/${id}/watch`)
+  return res.data
 }
 
 export default api
