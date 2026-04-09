@@ -226,11 +226,48 @@ export interface TopicAutomation {
   attention_count?: number
   open_case_count?: number
   critical_case_count?: number
+  follow_up_needed?: boolean
   dominant_kind?: string
   top_stores?: string[]
   signal_examples?: string[]
   case_titles?: string[]
   last_signal_at?: string
+}
+
+export interface ActionBoardItem {
+  topic_id: number
+  topic_title: string
+  group_id?: number
+  group_title?: string
+  priority: string
+  recommended_action: string
+  summary?: string
+  attention_count: number
+  open_case_count: number
+  critical_case_count: number
+  follow_up_needed: boolean
+  last_signal_at?: string
+  score: number
+}
+
+export interface GroupDigestTopic {
+  topic_id: number
+  topic_title: string
+  priority: string
+  recommended_action?: string
+  summary?: string
+}
+
+export interface GroupDigest {
+  group_id?: number
+  group_title: string
+  signal_count: number
+  attention_count: number
+  critical_case_count: number
+  open_case_count: number
+  follow_up_topics: number
+  recommended_focus: string
+  top_topics: GroupDigestTopic[]
 }
 
 export interface TopicSection {
@@ -362,6 +399,16 @@ export const getDigestOverview = async () => {
 
 export const getTopicSections = async (params?: Record<string, string | number | boolean>) => {
   const res = await api.get<{ items: TopicSection[]; total: number }>('/api/v1/flow/topic-sections', { params })
+  return res.data
+}
+
+export const getActionBoard = async (params?: Record<string, string | number | boolean>) => {
+  const res = await api.get<{ items: ActionBoardItem[]; total: number }>('/api/v1/flow/action-board', { params })
+  return res.data
+}
+
+export const getGroupDigests = async (params?: Record<string, string | number | boolean>) => {
+  const res = await api.get<{ items: GroupDigest[]; total: number }>('/api/v1/flow/group-digests', { params })
   return res.data
 }
 

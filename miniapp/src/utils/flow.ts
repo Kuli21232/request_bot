@@ -34,6 +34,7 @@ const ACTION_LABELS: Record<string, string> = {
   review_topic_queue: 'Разобрать топик',
   watch_topic: 'Наблюдать',
   collect_context: 'Собрать контекст',
+  follow_up: 'Нужен follow-up',
 }
 
 const CASE_STATUS_LABELS: Record<string, string> = {
