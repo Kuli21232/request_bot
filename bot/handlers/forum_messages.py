@@ -41,7 +41,7 @@ async def handle_forum_topic_edited(message: Message) -> None:
     await _sync_topic_metadata(message, title_override=message.forum_topic_edited.name)
 
 
-@router.message(F.text | F.photo | F.document | F.voice | F.audio)
+@router.message(F.text | F.photo | F.document | F.voice | F.audio | F.video)
 async def handle_forum_message(
     message: Message,
     bot: Bot,

@@ -7,6 +7,7 @@ from bot.database import AsyncSessionLocal
 from bot.database.repositories.request_repo import RequestRepository
 from bot.database.repositories.department_repo import DepartmentRepository
 from bot.services.notification_service import NotificationService
+from bot.services.topic_learning_service import TopicLearningService
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,14 @@ async def check_sla_breaches(bot: Bot) -> None:
                 await notification_service.notify_sla_breach(req, dept)
 
 
+async def retrain_topic_profiles() -> None:
+    async with AsyncSessionLocal() as session:
+        trainer = TopicLearningService()
+        results = await trainer.retrain_active_topics(session, limit=20)
+        await session.commit()
+        logger.info("Topic trainer: retrained %d topics", len(results))
+
+
 def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
     # Проверка SLA каждые 15 минут
@@ -38,6 +47,13 @@ def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
         minutes=15,
         kwargs={"bot": bot},
         id="sla_check",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        retrain_topic_profiles,
+        trigger="interval",
+        minutes=60,
+        id="topic_profile_retrain",
         replace_existing=True,
     )
     return scheduler

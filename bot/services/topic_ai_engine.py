@@ -78,6 +78,13 @@ class TopicAIEngine:
             "priority_rules": profile.priority_rules,
             "behavior_rules": profile.behavior_rules,
             "profile_summary": profile.profile_summary,
+            "examples": (profile.examples or [])[:4],
+            "learning_snapshot": {
+                "store_counts": dict(profile.learning_snapshot or {}).get("store_counts", {}),
+                "tag_counts": dict(profile.learning_snapshot or {}).get("tag_counts", {}),
+                "media_kind_counts": dict(profile.learning_snapshot or {}).get("media_kind_counts", {}),
+                "case_titles": dict(profile.learning_snapshot or {}).get("case_titles", [])[:5],
+            },
         }
 
     def apply_profile(self, ai_result: dict | None, topic: TelegramTopic, profile: TopicAIProfile, *, has_media: bool) -> dict:

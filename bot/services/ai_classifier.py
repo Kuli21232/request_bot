@@ -56,6 +56,8 @@ class AIClassifier:
                 f"- priority_rules: {topic_context.get('priority_rules')}\n"
                 f"- behavior_rules: {topic_context.get('behavior_rules')}\n"
                 f"- profile_summary: {topic_context.get('profile_summary')}\n\n"
+                f"- examples: {topic_context.get('examples')}\n"
+                f"- learning_snapshot: {topic_context.get('learning_snapshot')}\n\n"
             )
 
         prompt = f"{CLASSIFY_PROMPT}\n\n{context_block}Сообщение:\n{text[:3000]}"

@@ -4,6 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies import get_current_user, get_db, require_admin
+from bot.services.topic_learning_service import TopicLearningService
 from models.topic import TelegramTopic, TopicAIProfile
 
 router = APIRouter(prefix="/api/v1/topics", tags=["topics"])
@@ -73,6 +74,40 @@ async def update_topic_profile(
     await db.refresh(profile)
     topic = await db.get(TelegramTopic, topic_id)
     return _serialize_topic(topic, profile, full=True)
+
+
+@router.post("/{topic_id}/train")
+async def train_topic_profile(
+    topic_id: int,
+    current_user=Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    trainer = TopicLearningService()
+    result = await trainer.retrain_topic(db, topic_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Topic not found")
+    await db.commit()
+    topic = await db.get(TelegramTopic, topic_id)
+    await db.refresh(topic)
+    return {
+        "trained": True,
+        "result": result,
+        "topic": _serialize_topic(topic, topic.profile, full=True),
+    }
+
+
+@router.post("/train-all")
+async def train_all_topics(
+    current_user=Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    trainer = TopicLearningService()
+    results = await trainer.retrain_active_topics(db, limit=50)
+    await db.commit()
+    return {
+        "trained_count": len(results),
+        "results": results,
+    }
 
 
 def _serialize_topic(topic: TelegramTopic, profile: TopicAIProfile | None, *, full: bool = False) -> dict:

@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from models.flow import FlowCase, FlowSignal, SignalMedia
 
@@ -41,6 +42,38 @@ class FlowRepository:
         if department_id is not None:
             q = q.where(FlowSignal.department_id == department_id)
         result = await self.session.execute(q)
+        return list(result.scalars().all())
+
+    async def list_topic_training_signals(
+        self,
+        *,
+        topic_id: int,
+        limit: int = 80,
+    ) -> list[FlowSignal]:
+        result = await self.session.execute(
+            select(FlowSignal)
+            .options(
+                selectinload(FlowSignal.media_items),
+                selectinload(FlowSignal.case),
+            )
+            .where(FlowSignal.topic_id == topic_id)
+            .order_by(FlowSignal.happened_at.desc())
+            .limit(limit)
+        )
+        return list(result.scalars().all())
+
+    async def list_topic_cases(
+        self,
+        *,
+        topic_id: int,
+        limit: int = 20,
+    ) -> list[FlowCase]:
+        result = await self.session.execute(
+            select(FlowCase)
+            .where(FlowCase.primary_topic_id == topic_id)
+            .order_by(FlowCase.last_signal_at.desc().nullslast(), FlowCase.updated_at.desc())
+            .limit(limit)
+        )
         return list(result.scalars().all())
 
     async def find_case_candidates(
