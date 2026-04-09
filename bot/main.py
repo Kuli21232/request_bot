@@ -11,6 +11,7 @@ from aiogram.types import BotCommand
 from bot.config import settings
 from bot.handlers import callbacks, commands, forum_messages
 from bot.middlewares import AuthMiddleware, RateLimitMiddleware, TopicResolverMiddleware
+from bot.services.llm_service import LLMService
 from bot.services.sla_monitor import setup_scheduler
 
 logging.basicConfig(
@@ -85,6 +86,7 @@ def main_webhook() -> None:
 
     async def on_startup(app: web.Application) -> None:
         scheduler.start()
+        await LLMService().warmup()
         await bot.set_webhook(
             url=webhook_url,
             allowed_updates=["message", "callback_query"],

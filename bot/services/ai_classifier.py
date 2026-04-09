@@ -63,7 +63,8 @@ class AIClassifier:
             system=CLASSIFY_SYSTEM_PROMPT,
             prompt=prompt,
             temperature=0.15,
-            timeout=50,
+            timeout=14,
+            max_tokens=220,
         )
         if parsed is None:
             return None

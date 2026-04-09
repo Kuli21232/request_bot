@@ -87,7 +87,8 @@ class GuidanceService:
             system=ASSISTANT_SYSTEM_PROMPT,
             prompt=prompt,
             temperature=0.45 if mode == "guide" else 0.35,
-            timeout=70,
+            timeout=16,
+            max_tokens=220 if mode == "guide" else 180,
         )
 
     @staticmethod

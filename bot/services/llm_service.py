@@ -1,5 +1,6 @@
 import json
 import logging
+import asyncio
 
 import aiohttp
 
@@ -21,7 +22,8 @@ class LLMService:
         prompt: str,
         system: str | None = None,
         temperature: float = 0.4,
-        timeout: int = 60,
+        timeout: int = 18,
+        max_tokens: int = 180,
     ) -> str | None:
         if not self.enabled:
             return None
@@ -31,6 +33,7 @@ class LLMService:
             system=system,
             temperature=temperature,
             timeout=timeout,
+            max_tokens=max_tokens,
         )
         if payload is None:
             return None
@@ -42,7 +45,8 @@ class LLMService:
         prompt: str,
         system: str | None = None,
         temperature: float = 0.2,
-        timeout: int = 60,
+        timeout: int = 18,
+        max_tokens: int = 240,
     ) -> dict | None:
         if not self.enabled:
             return None
@@ -53,6 +57,7 @@ class LLMService:
             temperature=temperature,
             timeout=timeout,
             response_format="json",
+            max_tokens=max_tokens,
         )
         if payload is None:
             return None
@@ -71,28 +76,45 @@ class LLMService:
         temperature: float,
         timeout: int,
         response_format: str | None = None,
+        max_tokens: int = 180,
     ) -> str | None:
-        primary = await self._request_model(
-            model=self.model,
-            prompt=prompt,
-            system=system,
-            temperature=temperature,
-            timeout=timeout,
-            response_format=response_format,
-        )
+        try:
+            primary = await asyncio.wait_for(
+                self._request_model(
+                    model=self.model,
+                    prompt=prompt,
+                    system=system,
+                    temperature=temperature,
+                    timeout=timeout,
+                    response_format=response_format,
+                    max_tokens=max_tokens,
+                ),
+                timeout=timeout + 2,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("LLM primary request timed out for model %s", self.model)
+            primary = None
         if primary:
             return primary
 
         if self.fallback_model and self.fallback_model != self.model:
             logger.warning("Retrying LLM request with fallback model %s", self.fallback_model)
-            return await self._request_model(
-                model=self.fallback_model,
-                prompt=prompt,
-                system=system,
-                temperature=temperature,
-                timeout=timeout,
-                response_format=response_format,
-            )
+            try:
+                return await asyncio.wait_for(
+                    self._request_model(
+                        model=self.fallback_model,
+                        prompt=prompt,
+                        system=system,
+                        temperature=temperature,
+                        timeout=timeout,
+                        response_format=response_format,
+                        max_tokens=max_tokens,
+                    ),
+                    timeout=timeout + 2,
+                )
+            except asyncio.TimeoutError:
+                logger.warning("LLM fallback request timed out for model %s", self.fallback_model)
+                return None
         return None
 
     async def _request_model(
@@ -104,14 +126,17 @@ class LLMService:
         temperature: float,
         timeout: int,
         response_format: str | None,
+        max_tokens: int,
     ) -> str | None:
         try:
             body = {
                 "model": model,
                 "prompt": prompt,
                 "stream": False,
+                "keep_alive": "15m",
                 "options": {
                     "temperature": temperature,
+                    "num_predict": max_tokens,
                 },
             }
             if system:
@@ -136,3 +161,17 @@ class LLMService:
         except Exception as exc:
             logger.warning("LLM unavailable for model %s: %s", model, exc)
             return None
+
+    async def warmup(self) -> None:
+        if not self.enabled:
+            return
+        try:
+            await self.generate_text(
+                prompt="Ответь одним словом: готов",
+                system="Ты помощник.",
+                temperature=0.1,
+                timeout=12,
+                max_tokens=8,
+            )
+        except Exception as exc:
+            logger.warning("LLM warmup failed: %s", exc)
