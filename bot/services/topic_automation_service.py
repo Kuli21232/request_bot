@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.database.repositories.flow_repo import FlowRepository
 from bot.database.repositories.topic_repo import TopicRepository
-from bot.services.llm_service import LLMService
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +16,6 @@ class TopicAutomationService:
     def __init__(self) -> None:
         self.flow_repo = None
         self.topic_repo = None
-        self.llm = LLMService()
 
     async def refresh_active_topics(self, session: AsyncSession, *, limit: int = 20) -> list[dict]:
         topic_repo = TopicRepository(session)
@@ -44,9 +42,6 @@ class TopicAutomationService:
         signals = await flow_repo.list_topic_signal_briefs(topic_id=topic_id, limit=8)
         cases = await flow_repo.list_topic_cases(topic_id=topic_id, limit=5)
         snapshot = self._build_snapshot(topic, signals, cases)
-        llm_summary = await self._maybe_generate_summary(topic.title, snapshot)
-        if llm_summary:
-            snapshot["summary"] = llm_summary
 
         behavior_rules = dict(topic.profile.behavior_rules or {})
         behavior_rules["automation"] = snapshot
@@ -80,6 +75,7 @@ class TopicAutomationService:
             (signal.summary or " ".join(signal.body.split())[:110] or topic.title)
             for signal in signals[:4]
         ]
+        dominant_kind = kind_counts.most_common(1)[0][0] if kind_counts else None
 
         if critical_case_count or any(signal.importance == "critical" for signal in signals):
             priority = "critical"
@@ -101,9 +97,11 @@ class TopicAutomationService:
             topic_title=topic.title,
             signals=signals,
             cases=cases,
+            dominant_kind=dominant_kind,
             attention_count=attention_count,
             critical_case_count=critical_case_count,
             top_stores=top_stores,
+            signal_examples=signal_examples,
         )
 
         return {
@@ -113,7 +111,7 @@ class TopicAutomationService:
             "attention_count": attention_count,
             "open_case_count": open_case_count,
             "critical_case_count": critical_case_count,
-            "dominant_kind": kind_counts.most_common(1)[0][0] if kind_counts else None,
+            "dominant_kind": dominant_kind,
             "top_stores": top_stores,
             "signal_examples": signal_examples,
             "case_titles": [case.title for case in cases[:3]],
@@ -126,42 +124,26 @@ class TopicAutomationService:
         topic_title: str,
         signals: list,
         cases: list,
+        dominant_kind: str | None,
         attention_count: int,
         critical_case_count: int,
         top_stores: list[str],
+        signal_examples: list[str],
     ) -> str:
         if not signals:
             return f"Топик «{topic_title}» пока только собирает контекст."
 
         parts: list[str] = []
+        if dominant_kind:
+            parts.append(f"основной тип потока: {dominant_kind}")
         if attention_count:
             parts.append(f"есть {attention_count} сообщений, требующих внимания")
         if critical_case_count:
-            parts.append(f"{critical_case_count} критичных ситуации")
+            parts.append(f"{critical_case_count} критичных ситуаций")
         if top_stores:
             parts.append(f"чаще всего упоминаются точки: {', '.join(top_stores[:3])}")
+        if signal_examples:
+            parts.append(f"последние темы: {'; '.join(signal_examples[:2])}")
         if not parts:
             parts.append(f"в топике «{topic_title}» идет обычный рабочий поток")
         return "В топике " + " и ".join(parts) + "."
-
-    async def _maybe_generate_summary(self, topic_title: str, snapshot: dict) -> str | None:
-        if not self.llm.enabled:
-            return None
-        prompt = (
-            f"Topic: {topic_title}\n"
-            f"Priority: {snapshot['priority']}\n"
-            f"Recommended action: {snapshot['recommended_action']}\n"
-            f"Attention count: {snapshot['attention_count']}\n"
-            f"Critical cases: {snapshot['critical_case_count']}\n"
-            f"Top stores: {snapshot['top_stores']}\n"
-            f"Signal examples: {snapshot['signal_examples']}\n"
-            "Write one short Russian summary sentence for an operator. "
-            "Use only these facts and do not invent details."
-        )
-        return await self.llm.generate_text(
-            system="You summarize operational topic state. Always answer in Russian.",
-            prompt=prompt,
-            temperature=0.1,
-            timeout=10,
-            max_tokens=60,
-        )
