@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from collections import Counter
 from datetime import datetime, timezone
+import json
 import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from bot.config import settings
 from bot.database.repositories.flow_repo import FlowRepository
 from bot.database.repositories.topic_repo import TopicRepository
 from bot.services.llm_service import LLMService
@@ -158,13 +160,14 @@ class TopicLearningService:
         }
 
     async def _generate_profile_update(self, topic: TelegramTopic, profile: TopicAIProfile, insights: dict) -> dict | None:
+        compact_insights = self._build_compact_insights(insights)
         prompt = (
             f"Топик: {topic.title}\n"
             f"Текущий topic_kind: {topic.topic_kind}\n"
             f"Текущий summary: {profile.profile_summary or 'нет'}\n"
             f"Текущие allowed_signal_types: {profile.allowed_signal_types}\n"
             f"Текущие default_actions: {profile.default_actions}\n"
-            f"Статистика истории: {insights}\n\n"
+            f"Сжатая статистика истории: {json.dumps(compact_insights, ensure_ascii=False)}\n\n"
             "Верни JSON вида:\n"
             "{"
             "\"profile_summary\": str, "
@@ -175,16 +178,36 @@ class TopicLearningService:
             "\"behavior_rules\": dict, "
             "\"examples\": list[dict]"
             "}\n"
-            "Не делай поля длинными. Примеры должны быть прикладными и короткими."
+            "Не делай поля длинными. Примеры должны быть прикладными и короткими. "
+            "Если данных мало, сохрани простые и аккуратные правила без выдумок."
         )
 
         return await self.llm.generate_json(
             system=LEARNING_SYSTEM_PROMPT,
             prompt=prompt,
             temperature=0.15,
-            timeout=18,
-            max_tokens=360,
+            timeout=settings.OLLAMA_BACKGROUND_TIMEOUT,
+            max_tokens=240,
         )
+
+    def _build_compact_insights(self, insights: dict) -> dict:
+        return {
+            "signal_sample_size": insights["signal_sample_size"],
+            "case_sample_size": insights["case_sample_size"],
+            "dominant_signal_type": insights["dominant_signal_type"],
+            "topic_kind_guess": insights["topic_kind_guess"],
+            "critical_cases": insights["critical_cases"],
+            "open_cases": insights["open_cases"],
+            "kind_counts": self._top_items(insights["kind_counts"], limit=5),
+            "action_counts": self._top_items(insights["action_counts"], limit=5),
+            "importance_counts": self._top_items(insights["importance_counts"], limit=4),
+            "store_counts": self._top_items(insights["store_counts"], limit=5),
+            "tag_counts": self._top_items(insights["tag_counts"], limit=6),
+            "media_kind_counts": self._top_items(insights["media_kind_counts"], limit=4),
+            "entity_key_counts": self._top_items(insights["entity_key_counts"], limit=6),
+            "case_titles": insights["case_titles"][:4],
+            "examples": insights["examples"][:3],
+        }
 
     def _apply_learning(
         self,
@@ -212,7 +235,9 @@ class TopicLearningService:
                 "fallback": max(insights["action_counts"], key=insights["action_counts"].get)
                 if insights["action_counts"]
                 else default_actions.get("fallback", "digest_only"),
-                "media_only": "digest_only" if insights["media_kind_counts"].get("photo") else default_actions.get("media_only", "digest_only"),
+                "media_only": "digest_only"
+                if insights["media_kind_counts"].get("photo")
+                else default_actions.get("media_only", "digest_only"),
             }
         )
         if generated and isinstance(generated.get("default_actions"), dict):
@@ -306,3 +331,9 @@ class TopicLearningService:
             "top_stores": list(insights["store_counts"].keys())[:5],
             "media_kinds": insights["media_kind_counts"],
         }
+
+    @staticmethod
+    def _top_items(values: dict, *, limit: int) -> dict:
+        if not values:
+            return {}
+        return dict(sorted(values.items(), key=lambda item: item[1], reverse=True)[:limit])
