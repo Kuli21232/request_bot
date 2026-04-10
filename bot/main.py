@@ -1,6 +1,8 @@
 """Entry point for the Telegram bot."""
+
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
@@ -19,6 +21,28 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+
+
+async def _run_noncritical_step(
+    label: str,
+    action: Callable[[], Awaitable[object | None]],
+    *,
+    attempts: int = 3,
+    base_delay: float = 2.0,
+) -> bool:
+    for attempt in range(1, attempts + 1):
+        try:
+            await action()
+            if attempt > 1:
+                logger.info("%s succeeded on attempt %s", label, attempt)
+            return True
+        except Exception:
+            logger.exception("%s failed on attempt %s/%s", label, attempt, attempts)
+            if attempt < attempts:
+                await asyncio.sleep(base_delay * attempt)
+
+    logger.error("%s failed after %s attempts; continuing startup", label, attempts)
+    return False
 
 
 async def set_commands(bot: Bot) -> None:
@@ -77,19 +101,25 @@ def main_webhook() -> None:
 
     async def on_startup(app: web.Application) -> None:
         scheduler.start()
-        await LLMService().warmup()
-        await bot.set_webhook(
-            url=webhook_url,
-            allowed_updates=["message", "callback_query"],
+        await _run_noncritical_step("LLM warmup", LLMService().warmup)
+        webhook_ready = await _run_noncritical_step(
+            "Webhook registration",
+            lambda: bot.set_webhook(
+                url=webhook_url,
+                allowed_updates=["message", "callback_query"],
+            ),
         )
-        await set_commands(bot)
-        logger.info("Webhook установлен: %s", webhook_url)
+        await _run_noncritical_step("Bot command sync", lambda: set_commands(bot))
+        if webhook_ready:
+            logger.info("Webhook registered: %s", webhook_url)
+        else:
+            logger.warning("Webhook was not confirmed during startup: %s", webhook_url)
 
     async def on_shutdown(app: web.Application) -> None:
         scheduler.shutdown()
-        await bot.delete_webhook()
+        await _run_noncritical_step("Webhook cleanup", lambda: bot.delete_webhook(), attempts=1)
         await bot.session.close()
-        logger.info("Webhook удален")
+        logger.info("Webhook removed")
 
     app = web.Application()
     app.on_startup.append(on_startup)
