@@ -3,6 +3,7 @@
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
+from contextlib import suppress
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
@@ -99,8 +100,9 @@ def main_webhook() -> None:
     webhook_path = f"/webhook/{settings.BOT_TOKEN}"
     webhook_url = f"{settings.WEBHOOK_BASE_URL.rstrip('/')}{webhook_path}"
 
-    async def on_startup(app: web.Application) -> None:
-        scheduler.start()
+    async def bootstrap_runtime() -> None:
+        # Give aiohttp a moment to bind the port before Telegram checks the webhook URL.
+        await asyncio.sleep(2)
         await _run_noncritical_step("LLM warmup", LLMService().warmup)
         webhook_ready = await _run_noncritical_step(
             "Webhook registration",
@@ -115,7 +117,16 @@ def main_webhook() -> None:
         else:
             logger.warning("Webhook was not confirmed during startup: %s", webhook_url)
 
+    async def on_startup(app: web.Application) -> None:
+        scheduler.start()
+        app["bootstrap_task"] = asyncio.create_task(bootstrap_runtime())
+
     async def on_shutdown(app: web.Application) -> None:
+        bootstrap_task = app.get("bootstrap_task")
+        if bootstrap_task is not None and not bootstrap_task.done():
+            bootstrap_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await bootstrap_task
         scheduler.shutdown()
         await _run_noncritical_step("Webhook cleanup", lambda: bot.delete_webhook(), attempts=1)
         await bot.session.close()
