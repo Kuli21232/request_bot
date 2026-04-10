@@ -24,6 +24,9 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger(__name__)
+_ORIGINAL_GETADDRINFO = socket.getaddrinfo
+_TELEGRAM_IPV4_ONLY_HOSTS = {"api.telegram.org", "core.telegram.org"}
+_NETWORK_WORKAROUND_APPLIED = False
 
 
 async def _run_noncritical_step(
@@ -48,6 +51,24 @@ async def _run_noncritical_step(
     return False
 
 
+def apply_network_workarounds() -> None:
+    global _NETWORK_WORKAROUND_APPLIED
+
+    if _NETWORK_WORKAROUND_APPLIED:
+        return
+
+    def _ipv4_only_getaddrinfo(host, port, family=0, type=0, proto=0, flags=0):
+        results = _ORIGINAL_GETADDRINFO(host, port, family, type, proto, flags)
+        if host in _TELEGRAM_IPV4_ONLY_HOSTS:
+            ipv4_results = [result for result in results if result[0] == socket.AF_INET]
+            if ipv4_results:
+                return ipv4_results
+        return results
+
+    socket.getaddrinfo = _ipv4_only_getaddrinfo
+    _NETWORK_WORKAROUND_APPLIED = True
+
+
 async def set_commands(bot: Bot) -> None:
     await bot.set_my_commands(
         [
@@ -61,6 +82,7 @@ async def set_commands(bot: Bot) -> None:
 
 
 def create_bot() -> Bot:
+    apply_network_workarounds()
     session = AiohttpSession()
     session._connector_init["family"] = socket.AF_INET
     return Bot(
