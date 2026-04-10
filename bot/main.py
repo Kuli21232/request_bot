@@ -91,12 +91,18 @@ def create_bot() -> Bot:
     apply_network_workarounds()
     session = AiohttpSession()
     session._connector_init["family"] = socket.AF_INET
-    session._connector_init["resolver"] = IPv4Resolver()
     return Bot(
         token=settings.BOT_TOKEN,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
         session=session,
     )
+
+
+def configure_bot_network(bot: Bot) -> None:
+    connector_init = getattr(bot.session, "_connector_init", None)
+    if isinstance(connector_init, dict):
+        connector_init["family"] = socket.AF_INET
+        connector_init["resolver"] = IPv4Resolver()
 
 
 def create_dispatcher() -> Dispatcher:
@@ -115,6 +121,7 @@ def create_dispatcher() -> Dispatcher:
 async def main_polling() -> None:
     """Polling mode for local development."""
     bot = create_bot()
+    configure_bot_network(bot)
     dp = create_dispatcher()
 
     scheduler = setup_scheduler(bot)
@@ -159,6 +166,7 @@ def main_webhook() -> None:
             logger.warning("Webhook was not confirmed during startup: %s", webhook_url)
 
     async def on_startup(app: web.Application) -> None:
+        configure_bot_network(bot)
         scheduler.start()
         app["bootstrap_task"] = asyncio.create_task(bootstrap_runtime())
 
