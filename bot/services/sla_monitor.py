@@ -9,6 +9,7 @@ from bot.database.repositories.department_repo import DepartmentRepository
 from bot.services.notification_service import NotificationService
 from bot.services.topic_automation_service import TopicAutomationService
 from bot.services.topic_learning_service import TopicLearningService
+from bot.services.user_profile_ai_service import UserProfileAIService
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,14 @@ async def refresh_topic_automation() -> None:
         logger.info("Topic automation: refreshed %d topics", len(results))
 
 
+async def refresh_user_profiles() -> None:
+    async with AsyncSessionLocal() as session:
+        service = UserProfileAIService()
+        results = await service.refresh_active_snapshots(session, limit=40)
+        await session.commit()
+        logger.info("User profile AI: refreshed %d profiles", len(results))
+
+
 def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(timezone="Europe/Moscow")
     # Проверка SLA каждые 15 минут
@@ -70,6 +79,13 @@ def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
         trigger="interval",
         minutes=20,
         id="topic_automation_refresh",
+        replace_existing=True,
+    )
+    scheduler.add_job(
+        refresh_user_profiles,
+        trigger="interval",
+        minutes=30,
+        id="user_profile_refresh",
         replace_existing=True,
     )
     return scheduler

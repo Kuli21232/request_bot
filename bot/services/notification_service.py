@@ -1,4 +1,4 @@
-"""Telegram notifications for requests, profile notes, and subscriptions."""
+"""Telegram notifications for requests, profiles, and case assignments."""
 import logging
 
 from aiogram import Bot
@@ -8,6 +8,7 @@ from bot.database.repositories.knowledge_repo import KnowledgeRepository
 from bot.database.repositories.user_repo import UserRepository
 from bot.keyboards.inline import build_rating_keyboard
 from models.department import Department
+from models.flow import FlowCase
 from models.request import Request
 from models.user import User
 
@@ -119,6 +120,29 @@ class NotificationService:
                     f"{note_body[:500]}"
                 ),
             )
+
+    async def notify_case_responsible_assigned(
+        self,
+        *,
+        target_user: User,
+        actor: User,
+        flow_case: FlowCase,
+    ) -> None:
+        if target_user.telegram_user_id is None:
+            return
+
+        topic_title = flow_case.primary_topic.title if flow_case.primary_topic else "Без топика"
+        await self._safe_send(
+            target_user.telegram_user_id,
+            (
+                f"📌 <b>На вас назначена ситуация</b>\n"
+                f"Ситуация: <b>{flow_case.title}</b>\n"
+                f"Топик: {topic_title}\n"
+                f"Назначил: {actor.first_name}\n"
+                f"Приоритет: {flow_case.priority}\n\n"
+                f"{(flow_case.summary or 'Откройте mini app, чтобы посмотреть детали и рекомендации.')[:300]}"
+            ),
+        )
 
     async def _safe_send(self, chat_id: int, text: str, **kwargs) -> None:
         try:

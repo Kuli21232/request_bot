@@ -150,10 +150,37 @@ export interface FlowSignal {
   request_ticket?: string
   submitter_id?: number
   submitter_name?: string
+  submitter_username?: string
+  responsible_user_id?: number
+  responsible_user_name?: string
+  suggested_owner_id?: number
+  suggested_owner_name?: string
   source_topic_id?: number
   source_message_id?: number
   source_chat_id?: number
   happened_at: string
+}
+
+export interface FlowMediaItem {
+  id: number
+  kind: string
+  mime_type?: string
+  file_name?: string
+  original_size?: number
+  compressed_size?: number
+  width?: number
+  height?: number
+  duration_seconds?: number
+  preview_url?: string
+  content_url?: string
+  has_preview?: boolean
+  can_open_content?: boolean
+  topic_id?: number
+  topic_title?: string
+  group_title?: string
+  signal_id?: number
+  signal_summary?: string
+  happened_at?: string
 }
 
 export interface FlowSignalDetail extends FlowSignal {
@@ -161,6 +188,7 @@ export interface FlowSignalDetail extends FlowSignal {
   entities?: Record<string, any>
   ai_labels?: Record<string, any>
   media_flags?: Record<string, any>
+  media?: FlowMediaItem[]
 }
 
 export interface FlowCase {
@@ -178,8 +206,18 @@ export interface FlowCase {
   ai_confidence?: number
   department_id?: number
   department_name?: string
+  primary_topic_id?: number
+  primary_topic_title?: string
   request_id?: number
   request_ticket?: string
+  responsible_user_id?: number
+  responsible_user_name?: string
+  responsible_user_username?: string
+  assigned_by_user_id?: number
+  assigned_by_user_name?: string
+  assigned_at?: string
+  suggested_owner_id?: number
+  suggested_owner_name?: string
   last_signal_at?: string
   updated_at?: string
 }
@@ -320,6 +358,65 @@ export interface TeamUser {
   notes?: ProfileNote[]
   is_watching?: boolean
   watchers_count?: number
+  assigned_open_case_count?: number
+  critical_case_count?: number
+  submitted_signal_count?: number
+  ai_summary?: string
+  top_topics?: { topic_title: string; count: number; attention_count?: number }[]
+}
+
+export interface UserTopicActivityItem {
+  id: number
+  kind: string
+  importance: string
+  summary?: string
+  body: string
+  store?: string
+  topic_id?: number
+  topic_title?: string
+  case_id?: number
+  case_title?: string
+  request_id?: number
+  request_ticket?: string
+  has_media: boolean
+  requires_attention: boolean
+  happened_at: string
+  media?: FlowMediaItem[]
+}
+
+export interface UserTopicGroup {
+  topic_id?: number
+  topic_title: string
+  group_title?: string
+  signal_count: number
+  request_count: number
+  case_count: number
+  media_count: number
+  requires_attention_count: number
+  last_activity_at?: string
+  items: UserTopicActivityItem[]
+}
+
+export interface TeamProfile extends TeamUser {
+  assigned_cases: FlowCase[]
+  topic_groups: UserTopicGroup[]
+  media_items: FlowMediaItem[]
+  ai_summary?: string
+  ai_recommendations?: string[]
+  ai_snapshot?: {
+    summary?: string
+    dominant_topics?: { topic_title: string; count: number; attention_count?: number }[]
+    assigned_case_stats?: Record<string, number>
+    recommendations?: string[]
+    analysis?: Record<string, any>
+    last_analyzed_at?: string
+  } | null
+  permissions: {
+    is_self: boolean
+    can_view_team: boolean
+    can_view_internal_notes: boolean
+    can_assign_responsible: boolean
+  }
 }
 
 export const authTelegram = async (initData: string): Promise<{ access_token: string }> => {
@@ -418,6 +515,11 @@ export const getCase = async (id: number): Promise<FlowCaseDetail> => {
   return res.data
 }
 
+export const assignCaseResponsible = async (id: number, userId?: number | null) => {
+  const res = await api.patch(`/api/v1/flow/cases/${id}/responsible`, { user_id: userId ?? null })
+  return res.data
+}
+
 export const getDigestOverview = async () => {
   const res = await api.get('/api/v1/flow/digests/overview')
   return res.data
@@ -463,6 +565,16 @@ export const getTeamUser = async (id: number): Promise<TeamUser> => {
   return res.data
 }
 
+export const getMyProfile = async (): Promise<TeamProfile> => {
+  const res = await api.get('/api/v1/users/profile')
+  return res.data
+}
+
+export const getUserProfile = async (id: number): Promise<TeamProfile> => {
+  const res = await api.get(`/api/v1/users/${id}/profile`)
+  return res.data
+}
+
 export const addProfileNote = async (id: number, body: string, notifyTarget = false): Promise<ProfileNote> => {
   const res = await api.post(`/api/v1/users/${id}/notes`, { body, notify_target: notifyTarget })
   return res.data
@@ -476,6 +588,12 @@ export const watchProfile = async (id: number) => {
 export const unwatchProfile = async (id: number) => {
   const res = await api.delete(`/api/v1/users/${id}/watch`)
   return res.data
+}
+
+export const resolveApiUrl = (path?: string | null) => {
+  if (!path) return ''
+  if (/^https?:\/\//i.test(path)) return path
+  return `${API_URL}${path}`
 }
 
 export default api

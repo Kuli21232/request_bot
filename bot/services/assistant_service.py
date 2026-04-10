@@ -2,16 +2,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from sqlalchemy import select
+
 from bot.database.repositories.topic_repo import TopicRepository
 from bot.services.llm_service import LLMService
 from bot.services.topic_automation_service import TopicAutomationService
+from bot.services.user_profile_ai_service import UserProfileAIService
+from models.user import User
 
 ASSISTANT_SYSTEM_PROMPT = (
-    "You are the BeerShop AI operations assistant. "
-    "Answer in Russian. "
-    "Be practical and concise. "
-    "Use only the provided operations evidence. "
-    "Do not invent procedures, responsibilities, or facts that are not present in the evidence."
+    "Ты AI-помощник BeerShop по операционному потоку. "
+    "Отвечай по-русски. "
+    "Говори коротко, по делу и только на основе переданных данных. "
+    "Не выдумывай регламенты, роли и факты, которых нет в доказательствах."
 )
 
 SUMMARY_MARKERS = (
@@ -44,6 +47,17 @@ TOPIC_LIST_MARKERS = (
     "покажи темы",
 )
 
+PERSONAL_MARKERS = (
+    "что мне делать",
+    "что делать мне",
+    "мои задачи",
+    "мои проблемы",
+    "за что я отвечаю",
+    "что у меня на контроле",
+    "что у меня сейчас",
+    "моя загрузка",
+)
+
 ACTION_LABELS = {
     "digest_only": "в сводку",
     "attach_to_case": "добавить в ситуацию",
@@ -72,9 +86,22 @@ class AssistantService:
         self.topic_repo = TopicRepository(session)
         self.automation = TopicAutomationService()
         self.llm = LLMService()
+        self.profile_ai = UserProfileAIService()
 
-    async def answer(self, query: str, *, current_chat_id: int | None = None) -> AssistantAnswer:
+    async def answer(
+        self,
+        query: str,
+        *,
+        current_chat_id: int | None = None,
+        requester_user_id: int | None = None,
+    ) -> AssistantAnswer:
         normalized_query = " ".join((query or "").lower().replace("ё", "е").split())
+
+        if requester_user_id and self._is_personal_query(normalized_query):
+            payload = await self._build_personal_payload(requester_user_id)
+            generated = await self._generate_answer(query, payload, mode="personal_summary")
+            return AssistantAnswer(answer=generated or payload, mode="personal_summary", used_llm=bool(generated))
+
         groups = await self.topic_repo.list_groups_with_topics()
         current_group = None
         if current_chat_id is not None:
@@ -134,9 +161,53 @@ class AssistantService:
             return "next_steps"
         if any(marker in normalized_query for marker in TOPIC_LIST_MARKERS):
             return "topic_list"
-        if any(marker in normalized_query for marker in SUMMARY_MARKERS):
-            return "summary"
         return "summary"
+
+    @staticmethod
+    def _is_personal_query(normalized_query: str) -> bool:
+        return any(marker in normalized_query for marker in PERSONAL_MARKERS)
+
+    async def _build_personal_payload(self, requester_user_id: int) -> str:
+        result = await self.session.execute(select(User).where(User.id == requester_user_id))
+        user = result.scalar_one_or_none()
+        if user is None:
+            return "Не удалось загрузить профиль пользователя для персональной сводки."
+
+        profile = await self.profile_ai.build_profile_payload(
+            self.session,
+            target_user=user,
+            viewer_user=user,
+        )
+        lines = [f"Персональная сводка для {user.first_name}:"]
+        if profile.get("ai_summary"):
+            lines.append(profile["ai_summary"])
+
+        assigned_cases = profile.get("assigned_cases") or []
+        if assigned_cases:
+            lines.append("Открытые ответственности:")
+            for index, flow_case in enumerate(assigned_cases[:5], start=1):
+                lines.append(
+                    f"{index}. {flow_case['title']} — приоритет {flow_case['priority']}, "
+                    f"топик {flow_case.get('primary_topic_title') or 'без топика'}."
+                )
+        else:
+            lines.append("Открытых назначенных ситуаций сейчас нет.")
+
+        recommendations = profile.get("ai_recommendations") or []
+        if recommendations:
+            lines.append("Рекомендации:")
+            for item in recommendations[:4]:
+                lines.append(f"• {item}")
+
+        topic_groups = profile.get("topic_groups") or []
+        if topic_groups:
+            lines.append("Основные темы пользователя:")
+            for topic in topic_groups[:4]:
+                lines.append(
+                    f"• {topic['topic_title']}: сообщений {topic['signal_count']}, "
+                    f"внимание {topic['requires_attention_count']}."
+                )
+        return "\n".join(lines)
 
     @staticmethod
     def _match_group(normalized_query: str, groups: list) -> object | None:
@@ -217,7 +288,7 @@ class AssistantService:
     def _build_topic_summary_payload(topic_sections: list[dict], group_match) -> str:
         if not topic_sections:
             scope = f"в группе «{group_match.title}»" if group_match is not None else ""
-            return f"Не нашёл подходящий топик {scope}, чтобы собрать сводку."
+            return f"Не нашел подходящий топик {scope}, чтобы собрать сводку."
 
         primary = topic_sections[0]
         lines = [
@@ -244,7 +315,7 @@ class AssistantService:
                 lines.append(f"Последние сигналы: {signal_summaries}.")
         if len(topic_sections) > 1:
             related = ", ".join(section["topic_title"] for section in topic_sections[1:3])
-            lines.append(f"Рядом по смыслу ещё темы: {related}.")
+            lines.append(f"Рядом по смыслу еще темы: {related}.")
         return "\n".join(lines)
 
     @staticmethod
@@ -312,9 +383,7 @@ class AssistantService:
             )
         if sections:
             lines.append(
-                "Главные темы: "
-                + "; ".join(section["topic_title"] for section in sections[:5])
-                + "."
+                "Главные темы: " + "; ".join(section["topic_title"] for section in sections[:5]) + "."
             )
         return "\n".join(lines)
 
@@ -323,19 +392,20 @@ class AssistantService:
             return None
 
         task = {
-            "next_steps": "Turn this operations board into a practical manager answer with a clear short plan.",
-            "topic_list": "Turn this topic list into a short assistant answer that is easy to skim.",
-            "topic_summary": "Turn this topic evidence into a concise topic summary for an operator.",
-            "group_summary": "Turn this group evidence into a concise management summary.",
-            "global_summary": "Turn this global operations evidence into a concise management summary.",
-        }.get(mode, "Turn this evidence into a concise practical answer.")
+            "personal_summary": "Сделай персональную рабочую сводку и короткий план действий для сотрудника.",
+            "next_steps": "Преобразуй это в практичный ответ менеджеру с коротким планом действий.",
+            "topic_list": "Преобразуй список топиков в короткий и удобный для чтения ответ.",
+            "topic_summary": "Преобразуй факты по топику в короткую рабочую сводку для оператора.",
+            "group_summary": "Преобразуй факты по группе в короткую управленческую сводку.",
+            "global_summary": "Преобразуй факты по потоку в короткую управленческую сводку.",
+        }.get(mode, "Преобразуй факты в короткий практичный ответ.")
 
         prompt = (
             f"{task}\n\n"
-            f"User request:\n{query}\n\n"
-            f"Evidence:\n{payload}\n\n"
-            "Answer in Russian in 4-8 short lines. "
-            "Do not add facts beyond the evidence."
+            f"Запрос пользователя:\n{query}\n\n"
+            f"Доказательства:\n{payload}\n\n"
+            "Ответь по-русски в 4-8 коротких строках. "
+            "Не добавляй факты за пределами доказательств."
         )
         return await self.llm.generate_text(
             system=ASSISTANT_SYSTEM_PROMPT,

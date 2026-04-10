@@ -57,10 +57,12 @@ class MediaProcessor:
             )
 
         if message.document:
+            file = await bot.get_file(message.document.file_id)
             attachments.append(
                 {
                     "type": "document",
                     "file_id": message.document.file_id,
+                    "file_path": file.file_path,
                     "file_name": message.document.file_name,
                     "mime_type": message.document.mime_type,
                 }
@@ -69,6 +71,7 @@ class MediaProcessor:
                 {
                     "kind": "document",
                     "telegram_file_id": message.document.file_id,
+                    "telegram_file_path": file.file_path,
                     "file_name": message.document.file_name,
                     "mime_type": message.document.mime_type,
                     "storage_meta": {"stored": "metadata_only"},
@@ -76,10 +79,12 @@ class MediaProcessor:
             )
 
         if message.voice:
+            file = await bot.get_file(message.voice.file_id)
             attachments.append(
                 {
                     "type": "voice",
                     "file_id": message.voice.file_id,
+                    "file_path": file.file_path,
                     "duration": message.voice.duration,
                 }
             )
@@ -87,6 +92,7 @@ class MediaProcessor:
                 {
                     "kind": "voice",
                     "telegram_file_id": message.voice.file_id,
+                    "telegram_file_path": file.file_path,
                     "duration_seconds": message.voice.duration,
                     "mime_type": "audio/ogg",
                     "storage_meta": {"stored": "metadata_only"},
@@ -94,10 +100,12 @@ class MediaProcessor:
             )
 
         if message.audio:
+            file = await bot.get_file(message.audio.file_id)
             attachments.append(
                 {
                     "type": "audio",
                     "file_id": message.audio.file_id,
+                    "file_path": file.file_path,
                     "file_name": message.audio.file_name,
                 }
             )
@@ -105,6 +113,7 @@ class MediaProcessor:
                 {
                     "kind": "audio",
                     "telegram_file_id": message.audio.file_id,
+                    "telegram_file_path": file.file_path,
                     "file_name": message.audio.file_name,
                     "duration_seconds": message.audio.duration,
                     "mime_type": message.audio.mime_type,
@@ -114,10 +123,12 @@ class MediaProcessor:
 
         video = getattr(message, "video", None)
         if video:
+            file = await bot.get_file(video.file_id)
             attachments.append(
                 {
                     "type": "video",
                     "file_id": video.file_id,
+                    "file_path": file.file_path,
                     "file_name": getattr(video, "file_name", None),
                     "mime_type": getattr(video, "mime_type", None),
                     "duration": video.duration,
@@ -129,6 +140,7 @@ class MediaProcessor:
                 {
                     "kind": "video",
                     "telegram_file_id": video.file_id,
+                    "telegram_file_path": file.file_path,
                     "file_name": getattr(video, "file_name", None),
                     "mime_type": getattr(video, "mime_type", None),
                     "duration_seconds": video.duration,

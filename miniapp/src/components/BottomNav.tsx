@@ -5,7 +5,7 @@ const TABS = [
   { path: '/topics', label: 'Темы', icon: TopicIcon },
   { path: '/signals', label: 'Поток', icon: ListIcon },
   { path: '/cases', label: 'Ситуации', icon: FolderIcon },
-  { path: '/team', label: 'Команда', icon: UserIcon },
+  { path: '/team', label: 'Профиль', icon: UserIcon },
 ]
 
 function HomeIcon({ active }: { active: boolean }) {

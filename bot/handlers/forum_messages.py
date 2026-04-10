@@ -9,6 +9,7 @@ from bot.database import AsyncSessionLocal
 from bot.database.repositories.flow_repo import FlowRepository
 from bot.database.repositories.request_repo import RequestRepository
 from bot.database.repositories.topic_repo import TopicRepository
+from bot.database.repositories.user_repo import UserRepository
 from bot.keyboards.inline import build_request_created_keyboard
 from bot.services.ai_classifier import AIClassifier
 from bot.services.auto_router import AutoRouter
@@ -17,6 +18,7 @@ from bot.services.media_processor import MediaProcessor
 from bot.services.notification_service import NotificationService
 from bot.services.signal_threader import SignalThreader
 from bot.services.topic_ai_engine import TopicAIEngine
+from bot.services.user_profile_ai_service import UserProfileAIService
 from models.department import Department
 from models.topic import TelegramTopic, TopicAIProfile
 from models.user import User
@@ -122,7 +124,9 @@ async def handle_forum_message(
     async with AsyncSessionLocal() as session:
         flow_repo = FlowRepository(session)
         topic_repo = TopicRepository(session)
+        user_repo = UserRepository(session)
         threader = SignalThreader()
+        profile_ai = UserProfileAIService()
 
         stored_topic = await topic_repo.get_topic(topic.id)
         if stored_topic is None:
@@ -174,6 +178,11 @@ async def handle_forum_message(
         match_score = case_match.score
 
         if matched_case is None and action_needed in {"create_case", "attach_to_case", "suggest_escalation"} and not is_noise:
+            suggested_owner = (
+                await user_repo.get_agent_with_min_load(final_department.id)
+                if final_department is not None
+                else None
+            )
             created_case = await flow_repo.create_case(
                 group_id=stored_topic.group_id,
                 department_id=final_department.id if final_department else None,
@@ -184,7 +193,7 @@ async def handle_forum_message(
                 status="watching" if importance == "normal" else "open",
                 priority=importance,
                 kind=signal_type,
-                suggested_owner_id=None,
+                suggested_owner_id=suggested_owner.id if suggested_owner else None,
                 owners=[],
                 stores_affected=[store] if store else [],
                 ai_labels={
@@ -264,6 +273,9 @@ async def handle_forum_message(
             has_media=has_media,
         )
         await topic_repo.mark_signal_recorded(stored_topic)
+        await profile_ai.refresh_snapshot(session, db_user.id)
+        if matched_case and matched_case.responsible_user_id and matched_case.responsible_user_id != db_user.id:
+            await profile_ai.refresh_snapshot(session, matched_case.responsible_user_id)
         await session.commit()
 
     mini_app_url = (

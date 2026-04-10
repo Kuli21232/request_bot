@@ -15,6 +15,8 @@ class FlowCase(Base, TimestampMixin):
     department_id: Mapped[int | None] = mapped_column(ForeignKey("departments.id"), nullable=True)
     primary_topic_id: Mapped[int | None] = mapped_column(ForeignKey("telegram_topics.id"), nullable=True)
     request_id: Mapped[int | None] = mapped_column(ForeignKey("requests.id"), nullable=True)
+    responsible_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    assigned_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String(32), default="open", nullable=False)
@@ -27,13 +29,20 @@ class FlowCase(Base, TimestampMixin):
     recommended_action: Mapped[str | None] = mapped_column(Text, nullable=True)
     ai_confidence: Mapped[float | None] = mapped_column(nullable=True)
     last_signal_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    assigned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     signal_count: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     media_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     is_critical: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     department: Mapped["Department | None"] = relationship("Department")
     primary_topic: Mapped["TelegramTopic | None"] = relationship("TelegramTopic")
-    suggested_owner: Mapped["User | None"] = relationship("User")
+    suggested_owner: Mapped["User | None"] = relationship("User", foreign_keys=[suggested_owner_id])
+    responsible_user: Mapped["User | None"] = relationship(
+        "User", foreign_keys=[responsible_user_id], back_populates="responsible_flow_cases"
+    )
+    assigned_by: Mapped["User | None"] = relationship(
+        "User", foreign_keys=[assigned_by_user_id], back_populates="assigned_flow_cases"
+    )
     request: Mapped["Request | None"] = relationship("Request")
     signals: Mapped[list["FlowSignal"]] = relationship("FlowSignal", back_populates="case")
 
@@ -82,7 +91,7 @@ class FlowSignal(Base, TimestampMixin):
     department: Mapped["Department | None"] = relationship("Department")
     topic: Mapped["TelegramTopic | None"] = relationship("TelegramTopic")
     request: Mapped["Request | None"] = relationship("Request")
-    submitter: Mapped["User | None"] = relationship("User")
+    submitter: Mapped["User | None"] = relationship("User", back_populates="submitted_signals")
     media_items: Mapped[list["SignalMedia"]] = relationship(
         "SignalMedia", back_populates="signal", cascade="all, delete-orphan"
     )

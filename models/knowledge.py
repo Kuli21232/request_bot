@@ -1,4 +1,6 @@
-from sqlalchemy import Boolean, ForeignKey, Integer, String, Text, UniqueConstraint
+from datetime import datetime
+
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -23,7 +25,7 @@ class KnowledgeArticle(Base, TimestampMixin):
     updated_by: Mapped["User | None"] = relationship("User", foreign_keys=[updated_by_id])
 
 
-class UserProfileNote(Base):
+class UserProfileNote(Base, TimestampMixin):
     __tablename__ = "user_profile_notes"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -50,3 +52,18 @@ class UserProfileSubscription(Base, TimestampMixin):
 
     watcher: Mapped["User"] = relationship("User", foreign_keys=[watcher_user_id], back_populates="profile_subscriptions")
     target_user: Mapped["User"] = relationship("User", foreign_keys=[target_user_id], back_populates="profile_watchers")
+
+
+class UserProfileAISnapshot(Base, TimestampMixin):
+    __tablename__ = "user_profile_ai_snapshots"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, unique=True)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    dominant_topics: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    assigned_case_stats: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    recommendations: Mapped[list] = mapped_column(JSONB, default=list, nullable=False)
+    analysis: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
+    last_analyzed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=True)
+
+    user: Mapped["User"] = relationship("User", back_populates="profile_ai_snapshot")

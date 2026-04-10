@@ -63,3 +63,15 @@ class User(Base, TimestampMixin):
     profile_watchers: Mapped[list["UserProfileSubscription"]] = relationship(
         "UserProfileSubscription", foreign_keys="UserProfileSubscription.target_user_id", back_populates="target_user"
     )
+    submitted_signals: Mapped[list["FlowSignal"]] = relationship(
+        "FlowSignal", foreign_keys="FlowSignal.submitter_id", back_populates="submitter"
+    )
+    responsible_flow_cases: Mapped[list["FlowCase"]] = relationship(
+        "FlowCase", foreign_keys="FlowCase.responsible_user_id", back_populates="responsible_user"
+    )
+    assigned_flow_cases: Mapped[list["FlowCase"]] = relationship(
+        "FlowCase", foreign_keys="FlowCase.assigned_by_user_id", back_populates="assigned_by"
+    )
+    profile_ai_snapshot: Mapped["UserProfileAISnapshot | None"] = relationship(
+        "UserProfileAISnapshot", back_populates="user", uselist=False, cascade="all, delete-orphan"
+    )

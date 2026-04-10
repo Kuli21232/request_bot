@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { getSignal, type FlowSignalDetail } from '../api/client'
 import { Loader } from '../components/Loader'
+import { MediaGallery } from '../components/MediaGallery'
 import {
   getImportanceLabel,
   getReadableSignalTitle,
@@ -104,6 +105,45 @@ export default function SignalDetail() {
           </div>
         </section>
       </div>
+
+      <div className="screen-section">
+        <section className="glass-card" style={{ padding: 16 }}>
+          <div className="section-title" style={{ fontSize: 17, marginBottom: 10 }}>Кто участвует</div>
+          <div style={{ display: 'grid', gap: 14 }}>
+            {signal.submitter_id ? (
+              <Link to={`/team/${signal.submitter_id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                <div className="soft-card" style={{ padding: '13px 13px 12px' }}>
+                  <div style={{ fontSize: 12, color: 'var(--text-soft)', marginBottom: 6 }}>Отправитель</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-main)' }}>
+                    {signal.submitter_name || 'Сотрудник'} {signal.submitter_username ? `(@${signal.submitter_username})` : ''}
+                  </div>
+                </div>
+              </Link>
+            ) : (
+              <Field label="Отправитель" value="Не определён" />
+            )}
+            {signal.responsible_user_id ? (
+              <Link to={`/team/${signal.responsible_user_id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                <div className="soft-card" style={{ padding: '13px 13px 12px' }}>
+                  <div style={{ fontSize: 12, color: 'var(--text-soft)', marginBottom: 6 }}>Ответственный за ситуацию</div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-main)' }}>
+                    {signal.responsible_user_name}
+                  </div>
+                </div>
+              </Link>
+            ) : (
+              <Field label="Ответственный за ситуацию" value="Пока не назначен" />
+            )}
+            {signal.suggested_owner_name && <Field label="Кого рекомендует AI" value={signal.suggested_owner_name} />}
+          </div>
+        </section>
+      </div>
+
+      {signal.media && signal.media.length > 0 && (
+        <div className="screen-section">
+          <MediaGallery items={signal.media} title="Вложения" compact />
+        </div>
+      )}
 
       {signal.case_id && (
         <div className="screen-section">

@@ -4,7 +4,7 @@ from models.telegram_group import TelegramGroup
 from models.department import Department
 from models.flow import FlowCase, FlowSignal
 from models.flow import SignalMedia
-from models.knowledge import KnowledgeArticle, UserProfileNote, UserProfileSubscription
+from models.knowledge import KnowledgeArticle, UserProfileAISnapshot, UserProfileNote, UserProfileSubscription
 from models.topic import TelegramTopic, TopicAIProfile
 from models.user import User
 from models.request import Request, RequestComment, RequestHistory
@@ -23,6 +23,7 @@ __all__ = [
     "FlowSignal",
     "SignalMedia",
     "KnowledgeArticle",
+    "UserProfileAISnapshot",
     "UserProfileNote",
     "UserProfileSubscription",
     "User",
