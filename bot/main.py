@@ -2,11 +2,13 @@
 
 import asyncio
 import logging
+import socket
 from collections.abc import Awaitable, Callable
 from contextlib import suppress
 
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
+from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand
@@ -58,6 +60,16 @@ async def set_commands(bot: Bot) -> None:
     )
 
 
+def create_bot() -> Bot:
+    session = AiohttpSession()
+    session._connector_init["family"] = socket.AF_INET
+    return Bot(
+        token=settings.BOT_TOKEN,
+        default=DefaultBotProperties(parse_mode=ParseMode.HTML),
+        session=session,
+    )
+
+
 def create_dispatcher() -> Dispatcher:
     dp = Dispatcher(storage=MemoryStorage())
 
@@ -73,7 +85,7 @@ def create_dispatcher() -> Dispatcher:
 
 async def main_polling() -> None:
     """Polling mode for local development."""
-    bot = Bot(token=settings.BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    bot = create_bot()
     dp = create_dispatcher()
 
     scheduler = setup_scheduler(bot)
@@ -93,7 +105,7 @@ def main_webhook() -> None:
     from aiohttp import web
     from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
-    bot = Bot(token=settings.BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    bot = create_bot()
     dp = create_dispatcher()
     scheduler = setup_scheduler(bot)
 
