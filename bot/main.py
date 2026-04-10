@@ -12,6 +12,7 @@ from aiogram.client.session.aiohttp import AiohttpSession
 from aiogram.enums import ParseMode
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand
+from aiohttp.resolver import ThreadedResolver
 
 from bot.config import settings
 from bot.handlers import callbacks, commands, forum_messages
@@ -27,6 +28,11 @@ logger = logging.getLogger(__name__)
 _ORIGINAL_GETADDRINFO = socket.getaddrinfo
 _TELEGRAM_IPV4_ONLY_HOSTS = {"api.telegram.org", "core.telegram.org"}
 _NETWORK_WORKAROUND_APPLIED = False
+
+
+class IPv4Resolver(ThreadedResolver):
+    async def resolve(self, host: str, port: int = 0, family: socket.AddressFamily = socket.AF_INET):
+        return await super().resolve(host, port, family=socket.AF_INET)
 
 
 async def _run_noncritical_step(
@@ -85,6 +91,7 @@ def create_bot() -> Bot:
     apply_network_workarounds()
     session = AiohttpSession()
     session._connector_init["family"] = socket.AF_INET
+    session._connector_init["resolver"] = IPv4Resolver()
     return Bot(
         token=settings.BOT_TOKEN,
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
