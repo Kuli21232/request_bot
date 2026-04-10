@@ -188,7 +188,6 @@ async def cmd_assistant(message: Message, db_user: User | None) -> None:
             parts[1],
             current_chat_id=(message.chat.id if message.chat.type == "supergroup" else None),
             requester_user_id=(db_user.id if db_user else None),
-            requester_user_id=(db_user.id if db_user else None),
         )
 
     await message.reply(escape(result.answer), parse_mode="HTML")
