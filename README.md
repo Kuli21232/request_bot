@@ -94,6 +94,20 @@ curl -fsS "https://api.telegram.org/bot${BOT_TOKEN}/getWebhookInfo"
 docker logs --tail 100 request_bot-bot-1
 ```
 
+### Ручной прогон AI-обучения
+
+Если нужно принудительно дообучить AI-профили топиков и пользователей без ожидания фонового scheduler:
+
+```bash
+docker compose exec bot python -m bot.train --force-topics --topics-limit 50 --profiles-limit 80 --json
+```
+
+Для быстрой smoke-проверки AI-помощника можно задать свой запрос:
+
+```bash
+docker compose exec bot python -m bot.train --verify-query "сделай сводку по ЕГАИС"
+```
+
 - В `getWebhookInfo` должен появиться URL на `https://bot-api.24beershop.ru/webhook/...`
 - В логах бота должен быть `Webhook установлен`, а не `Запуск в режиме polling`
 - Кнопка `Открыть заявку` должна открывать `app.24beershop.ru`
