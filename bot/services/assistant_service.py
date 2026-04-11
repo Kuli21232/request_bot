@@ -408,10 +408,27 @@ class AssistantService:
             "Ответь по-русски в 4-8 коротких строках. "
             "Не добавляй факты за пределами доказательств."
         )
-        return await self.llm.generate_text(
+        generated = await self.llm.generate_text(
             system=ASSISTANT_SYSTEM_PROMPT,
             prompt=prompt,
             temperature=0.2,
             timeout=max(24, settings.OLLAMA_BACKGROUND_TIMEOUT - 4),
             max_tokens=220,
+        )
+        if generated:
+            return generated
+
+        await self.llm.warmup()
+        retry_prompt = (
+            f"Запрос:\n{query}\n\n"
+            f"Короткие факты:\n{payload[:1400]}\n\n"
+            "Ответь по-русски в 3-5 коротких строках. "
+            "Используй только эти факты и не додумывай лишнее."
+        )
+        return await self.llm.generate_text(
+            system="Ты краткий и точный AI-помощник BeerShop. Отвечай только по данным.",
+            prompt=retry_prompt,
+            temperature=0.1,
+            timeout=settings.OLLAMA_BACKGROUND_TIMEOUT,
+            max_tokens=140,
         )
