@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 import re
 
 from sqlalchemy import case, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -14,6 +15,15 @@ from models.topic import TelegramTopic, TopicAIProfile
 class TopicRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
+
+    async def _load_topic(self, *, group_id: int, topic_id: int) -> TelegramTopic | None:
+        result = await self.session.execute(
+            select(TelegramTopic)
+            .options(selectinload(TelegramTopic.profile))
+            .where(TelegramTopic.group_id == group_id)
+            .where(TelegramTopic.telegram_topic_id == topic_id)
+        )
+        return result.scalar_one_or_none()
 
     async def ensure_group(self, chat_id: int, title: str) -> TelegramGroup:
         result = await self.session.execute(
@@ -51,13 +61,7 @@ class TopicRepository:
         has_media: bool = False,
     ) -> tuple[TelegramTopic, TopicAIProfile]:
         group = await self.ensure_group(chat_id, chat_title)
-        result = await self.session.execute(
-            select(TelegramTopic)
-            .options(selectinload(TelegramTopic.profile))
-            .where(TelegramTopic.group_id == group.id)
-            .where(TelegramTopic.telegram_topic_id == topic_id)
-        )
-        topic = result.scalar_one_or_none()
+        topic = await self._load_topic(group_id=group.id, topic_id=topic_id)
         resolved_title = topic_title or (department.name if department else f"Topic {topic_id}")
         if topic is None:
             topic = TelegramTopic(
@@ -69,14 +73,31 @@ class TopicRepository:
                 last_message_at=seen_at,
             )
             self.session.add(topic)
-            await self.session.flush()
-            profile = TopicAIProfile(
-                topic_id=topic.id,
-                preferred_department_id=department.id if department else None,
-            )
-            self.session.add(profile)
-            topic.profile = profile
-            await self.session.flush()
+            try:
+                await self.session.flush()
+            except IntegrityError:
+                await self.session.rollback()
+                group = await self.ensure_group(chat_id, chat_title)
+                topic = await self._load_topic(group_id=group.id, topic_id=topic_id)
+                if topic is None:
+                    raise
+                profile = topic.profile
+            else:
+                profile = TopicAIProfile(
+                    topic_id=topic.id,
+                    preferred_department_id=department.id if department else None,
+                )
+                self.session.add(profile)
+                topic.profile = profile
+                try:
+                    await self.session.flush()
+                except IntegrityError:
+                    await self.session.rollback()
+                    group = await self.ensure_group(chat_id, chat_title)
+                    topic = await self._load_topic(group_id=group.id, topic_id=topic_id)
+                    if topic is None:
+                        raise
+                    profile = topic.profile
         else:
             if resolved_title and (topic.title.startswith("Topic ") or topic.title != resolved_title):
                 topic.title = resolved_title
