@@ -1,12 +1,15 @@
 """Bot commands."""
+import asyncio
 from html import escape
 import logging
+from typing import Awaitable, Callable, TypeVar
 
 from aiogram import Bot, F, Router
 from aiogram.filters import Command, CommandStart
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import Message
+from aiogram.utils.chat_action import ChatActionSender
 from sqlalchemy import select
 
 from bot.database import AsyncSessionLocal
@@ -27,6 +30,7 @@ from models.user import User
 
 logger = logging.getLogger(__name__)
 router = Router()
+T = TypeVar("T")
 
 
 class RegisterTopicFSM(StatesGroup):
@@ -72,6 +76,38 @@ def _shorten(text: str | None, *, limit: int = 120) -> str:
     if len(value) <= limit:
         return value
     return f"{value[: limit - 1]}…"
+
+
+async def _run_with_ai_feedback(
+    message: Message,
+    *,
+    task_factory: Callable[[], Awaitable[T]],
+    service_text: str = "AI-сервис обрабатывает запрос. Формирую ответ...",
+    status_delay: float = 1.5,
+) -> T:
+    status_message: Message | None = None
+
+    async def _show_status_later() -> None:
+        nonlocal status_message
+        await asyncio.sleep(status_delay)
+        status_message = await message.reply(service_text)
+
+    status_task = asyncio.create_task(_show_status_later())
+    try:
+        async with ChatActionSender.typing(bot=message.bot, chat_id=message.chat.id):
+            return await task_factory()
+    finally:
+        if not status_task.done():
+            status_task.cancel()
+            try:
+                await status_task
+            except asyncio.CancelledError:
+                pass
+        if status_message is not None:
+            try:
+                await status_message.delete()
+            except Exception:
+                logger.debug("Unable to delete AI service status message", exc_info=True)
 
 
 def _format_topic_rank_line(item: dict, index: int) -> str:
@@ -135,10 +171,17 @@ async def cmd_ask(message: Message, db_user: User | None) -> None:
         await message.reply("Напишите вопрос после команды, например: /ask как работает бот")
         return
 
-    async with AsyncSessionLocal() as session:
-        repo = KnowledgeRepository(session)
-        service = GuidanceService(repo)
-        answer = await service.answer(parts[1], audience=(db_user.role.value if db_user else "all"), mode="answer")
+    async def _build_answer() -> dict:
+        async with AsyncSessionLocal() as session:
+            repo = KnowledgeRepository(session)
+            service = GuidanceService(repo)
+            return await service.answer(parts[1], audience=(db_user.role.value if db_user else "all"), mode="answer")
+
+    answer = await _run_with_ai_feedback(
+        message,
+        task_factory=_build_answer,
+        service_text="AI-сервис ищет ответ и формирует сообщение...",
+    )
 
     lines = [answer["answer"]]
     if answer["sources"]:
@@ -154,10 +197,17 @@ async def cmd_guide(message: Message, db_user: User | None) -> None:
         await message.reply("Укажите тему, например: /guide профили сотрудников")
         return
 
-    async with AsyncSessionLocal() as session:
-        repo = KnowledgeRepository(session)
-        service = GuidanceService(repo)
-        answer = await service.answer(parts[1], audience=(db_user.role.value if db_user else "all"), mode="guide")
+    async def _build_guide() -> dict:
+        async with AsyncSessionLocal() as session:
+            repo = KnowledgeRepository(session)
+            service = GuidanceService(repo)
+            return await service.answer(parts[1], audience=(db_user.role.value if db_user else "all"), mode="guide")
+
+    answer = await _run_with_ai_feedback(
+        message,
+        task_factory=_build_guide,
+        service_text="AI-сервис собирает инструкцию и готовит ответ...",
+    )
 
     lines = [answer["answer"]]
     if answer["sources"]:
@@ -182,13 +232,20 @@ async def cmd_assistant(message: Message, db_user: User | None) -> None:
         )
         return
 
-    async with AsyncSessionLocal() as session:
-        service = AssistantService(session)
-        result = await service.answer(
-            parts[1],
-            current_chat_id=(message.chat.id if message.chat.type == "supergroup" else None),
-            requester_user_id=(db_user.id if db_user else None),
-        )
+    async def _build_assistant_answer():
+        async with AsyncSessionLocal() as session:
+            service = AssistantService(session)
+            return await service.answer(
+                parts[1],
+                current_chat_id=(message.chat.id if message.chat.type == "supergroup" else None),
+                requester_user_id=(db_user.id if db_user else None),
+            )
+
+    result = await _run_with_ai_feedback(
+        message,
+        task_factory=_build_assistant_answer,
+        service_text="AI-сервис анализирует топики и собирает сводку...",
+    )
 
     await message.reply(escape(result.answer), parse_mode="HTML")
 
@@ -204,13 +261,43 @@ async def cmd_digest(message: Message, db_user: User | None) -> None:
     if message.chat.type != "supergroup" and len(parts) == 1:
         prompt = "сделай общую сводку по потоку"
 
-    async with AsyncSessionLocal() as session:
-        service = AssistantService(session)
-        result = await service.answer(
-            prompt,
-            current_chat_id=(message.chat.id if message.chat.type == "supergroup" else None),
-            requester_user_id=(db_user.id if db_user else None),
-        )
+    async def _build_digest():
+        async with AsyncSessionLocal() as session:
+            service = AssistantService(session)
+            return await service.answer(
+                prompt,
+                current_chat_id=(message.chat.id if message.chat.type == "supergroup" else None),
+                requester_user_id=(db_user.id if db_user else None),
+            )
+
+    result = await _run_with_ai_feedback(
+        message,
+        task_factory=_build_digest,
+        service_text="AI-сервис собирает сводку по потоку...",
+    )
+
+    await message.reply(escape(result.answer), parse_mode="HTML")
+
+
+@router.message(Command("next"))
+async def cmd_next_with_feedback(message: Message, db_user: User | None) -> None:
+    if not _is_staff(db_user):
+        await message.reply("РџСЂРёРѕСЂРёС‚РµС‚С‹ РїРѕ РїРѕС‚РѕРєСѓ РґРѕСЃС‚СѓРїРЅС‹ РёСЃРїРѕР»РЅРёС‚РµР»СЏРј Рё СЂСѓРєРѕРІРѕРґРёС‚РµР»СЏРј.")
+        return
+
+    async def _build_next():
+        async with AsyncSessionLocal() as session:
+            service = AssistantService(session)
+            return await service.answer(
+                "С‡С‚Рѕ СЃРµР№С‡Р°СЃ РЅСѓР¶РЅРѕ СЃРґРµР»Р°С‚СЊ РІ РїРµСЂРІСѓСЋ РѕС‡РµСЂРµРґСЊ",
+                current_chat_id=(message.chat.id if message.chat.type == "supergroup" else None),
+            )
+
+    result = await _run_with_ai_feedback(
+        message,
+        task_factory=_build_next,
+        service_text="AI-сервис проверяет приоритеты и готовит рекомендации...",
+    )
 
     await message.reply(escape(result.answer), parse_mode="HTML")
 
