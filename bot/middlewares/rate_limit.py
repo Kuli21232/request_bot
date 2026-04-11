@@ -19,6 +19,11 @@ class RateLimitMiddleware(BaseMiddleware):
         event: Message,
         data: dict[str, Any],
     ) -> Any:
+        # Never throttle operational forum traffic. These messages must still
+        # reach topic sync and flow ingestion even if a user is actively testing.
+        if getattr(event.chat, "type", None) == "supergroup":
+            return await handler(event, data)
+
         if event.from_user is None:
             return await handler(event, data)
 
