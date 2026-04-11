@@ -70,6 +70,13 @@ class TopicRepository:
             )
             self.session.add(topic)
             await self.session.flush()
+            profile = TopicAIProfile(
+                topic_id=topic.id,
+                preferred_department_id=department.id if department else None,
+            )
+            self.session.add(profile)
+            topic.profile = profile
+            await self.session.flush()
         else:
             if resolved_title and (topic.title.startswith("Topic ") or topic.title != resolved_title):
                 topic.title = resolved_title
@@ -77,18 +84,19 @@ class TopicRepository:
                 topic.icon_emoji = icon_emoji
             topic.last_seen_at = seen_at or datetime.now(timezone.utc)
             topic.last_message_at = seen_at or datetime.now(timezone.utc)
+            profile = topic.profile
 
         topic.message_count += 1
         if has_media:
             topic.media_count += 1
 
-        profile = topic.profile
         if profile is None:
             profile = TopicAIProfile(
                 topic_id=topic.id,
                 preferred_department_id=department.id if department else None,
             )
             self.session.add(profile)
+            topic.profile = profile
             await self.session.flush()
         elif department and profile.preferred_department_id is None:
             profile.preferred_department_id = department.id
