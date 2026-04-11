@@ -29,7 +29,6 @@ router = Router()
 
 router.message.filter(
     F.chat.type == "supergroup",
-    F.message_thread_id.is_not(None),
 )
 
 
@@ -43,7 +42,10 @@ async def handle_forum_topic_edited(message: Message) -> None:
     await _sync_topic_metadata(message, title_override=message.forum_topic_edited.name)
 
 
-@router.message(F.text | F.photo | F.document | F.voice | F.audio | F.video)
+@router.message(
+    F.message_thread_id.is_not(None),
+    F.text | F.photo | F.document | F.voice | F.audio | F.video,
+)
 async def handle_forum_message(
     message: Message,
     bot: Bot,
@@ -339,21 +341,33 @@ def _signal_type_label(signal_type: str) -> str:
 
 
 async def _sync_topic_metadata(message: Message, *, title_override: str) -> None:
-    if message.message_thread_id is None:
+    topic_thread_id = _extract_topic_thread_id(message)
+    if topic_thread_id is None:
         return
 
     async with AsyncSessionLocal() as session:
         topic_repo = TopicRepository(session)
         department = await topic_repo.get_department_by_topic(
             chat_id=message.chat.id,
-            topic_id=message.message_thread_id,
+            topic_id=topic_thread_id,
         )
         await topic_repo.ensure_topic(
             chat_id=message.chat.id,
             chat_title=message.chat.title or "Telegram group",
-            topic_id=message.message_thread_id,
+            topic_id=topic_thread_id,
             topic_title=title_override,
             department=department,
             seen_at=message.date,
         )
         await session.commit()
+
+
+def _extract_topic_thread_id(message: Message) -> int | None:
+    if message.message_thread_id is not None:
+        return message.message_thread_id
+
+    reply_to = getattr(message, "reply_to_message", None)
+    if reply_to is not None and getattr(reply_to, "message_thread_id", None) is not None:
+        return reply_to.message_thread_id
+
+    return None
