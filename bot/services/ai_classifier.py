@@ -76,6 +76,17 @@ CHAT_MARKERS = (
     "+",
 )
 
+NON_STORE_WORDS = {
+    "спасибо",
+    "добрый",
+    "здравствуйте",
+    "привет",
+    "ок",
+    "окей",
+    "понял",
+    "поняла",
+}
+
 STATUS_MARKERS = (
     "решается",
     "сделано",
@@ -405,13 +416,13 @@ class AIClassifier:
     @staticmethod
     def _build_summary(text: str, *, signal_type: str, topic_label: str) -> str:
         clean = " ".join(text.split())
+        if signal_type == "chat/noise":
+            return "Короткое обсуждение без действия"
         first_sentence = re.split(r"(?<=[.!?])\s+", clean)[0].strip() if clean else topic_label
         if len(first_sentence) > 90:
             first_sentence = first_sentence[:89].rstrip() + "…"
         if len(first_sentence.split()) <= 2:
             return topic_label
-        if signal_type == "chat/noise":
-            return "Короткое обсуждение без действия"
         return first_sentence or topic_label
 
     @staticmethod
@@ -442,7 +453,9 @@ class AIClassifier:
         entities: dict = {}
         store_match = re.match(r"^\s*([А-ЯA-Z][\w-]{2,}(?:\s+[А-ЯA-Z][\w-]{2,}){0,2})[\s,:.-]", text)
         if store_match:
-            entities["store"] = store_match.group(1).strip()
+            candidate = store_match.group(1).strip()
+            if candidate.lower() not in NON_STORE_WORDS:
+                entities["store"] = candidate
 
         matched_issues = [marker for marker in (*BLOCKER_MARKERS, *PROBLEM_IMPACT_MARKERS) if marker in normalized_text]
         if matched_issues:
