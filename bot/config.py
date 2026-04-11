@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     OLLAMA_MODEL: str = "qwen2.5:0.5b"
     OLLAMA_FALLBACK_MODEL: str = "qwen2.5:0.5b"
     OLLAMA_ENABLED: bool = False
-    OLLAMA_BACKGROUND_TIMEOUT: int = 28
+    OLLAMA_BACKGROUND_TIMEOUT: int = 40
 
     # SLA
     DEFAULT_SLA_HOURS: int = 24

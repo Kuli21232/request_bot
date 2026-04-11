@@ -4,6 +4,7 @@ from dataclasses import dataclass
 
 from sqlalchemy import select
 
+from bot.config import settings
 from bot.database.repositories.topic_repo import TopicRepository
 from bot.services.llm_service import LLMService
 from bot.services.topic_automation_service import TopicAutomationService
@@ -411,6 +412,6 @@ class AssistantService:
             system=ASSISTANT_SYSTEM_PROMPT,
             prompt=prompt,
             temperature=0.2,
-            timeout=18,
+            timeout=max(24, settings.OLLAMA_BACKGROUND_TIMEOUT - 4),
             max_tokens=220,
         )
