@@ -66,7 +66,13 @@ class LLMService:
             return json.loads(payload)
         except json.JSONDecodeError as exc:
             logger.warning("LLM returned invalid JSON: %s", exc)
-            return None
+            extracted = self._extract_json_object(payload)
+            if extracted is None:
+                return None
+            try:
+                return json.loads(extracted)
+            except json.JSONDecodeError:
+                return None
 
     async def _generate(
         self,
@@ -175,3 +181,11 @@ class LLMService:
             )
         except Exception as exc:
             logger.warning("LLM warmup failed: %s", exc)
+
+    @staticmethod
+    def _extract_json_object(payload: str) -> str | None:
+        start = payload.find("{")
+        end = payload.rfind("}")
+        if start == -1 or end == -1 or end <= start:
+            return None
+        return payload[start : end + 1]
