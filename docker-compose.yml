@@ -46,6 +46,8 @@ services:
       context: .
       dockerfile: Dockerfile.bot
     restart: unless-stopped
+    extra_hosts:
+      - "api.telegram.org:149.154.167.220"
     env_file: .env
     environment:
       DATABASE_URL: postgresql+asyncpg://requestbot:${POSTGRES_PASSWORD}@postgres:5432/requestbot
