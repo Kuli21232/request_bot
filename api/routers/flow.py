@@ -31,6 +31,7 @@ async def list_signals(
     kind: str | None = Query(None),
     importance: str | None = Query(None),
     case_id: int | None = Query(None),
+    topic_id: int | None = Query(None),
     has_media: bool | None = Query(None),
     requires_attention: bool | None = Query(None),
     digest_bucket: str | None = Query(None),
@@ -59,6 +60,8 @@ async def list_signals(
         query = query.where(FlowSignal.importance == importance)
     if case_id:
         query = query.where(FlowSignal.case_id == case_id)
+    if topic_id:
+        query = query.where(FlowSignal.topic_id == topic_id)
     if has_media is not None:
         query = query.where(FlowSignal.has_media == has_media)
     if requires_attention is not None:
@@ -126,6 +129,7 @@ async def list_cases(
     status: str | None = Query(None),
     kind: str | None = Query(None),
     priority: str | None = Query(None),
+    topic_id: int | None = Query(None),
     is_critical: bool | None = Query(None),
     search: str | None = Query(None),
     page: int = Query(1, ge=1),
@@ -151,6 +155,8 @@ async def list_cases(
         query = query.where(FlowCase.kind == kind)
     if priority:
         query = query.where(FlowCase.priority == priority)
+    if topic_id:
+        query = query.where(FlowCase.primary_topic_id == topic_id)
     if is_critical is not None:
         query = query.where(FlowCase.is_critical == is_critical)
     if search:
@@ -432,40 +438,18 @@ async def _load_media(db: AsyncSession, media_id: int) -> SignalMedia | None:
 
 
 def _apply_case_visibility(query, current_user):
-    if current_user.role in STAFF_ROLES:
-        return query
-    return (
-        query.outerjoin(Request, FlowCase.request_id == Request.id)
-        .outerjoin(FlowSignal, FlowSignal.case_id == FlowCase.id)
-        .where(
-            or_(
-                FlowCase.responsible_user_id == current_user.id,
-                Request.submitter_id == current_user.id,
-                FlowSignal.submitter_id == current_user.id,
-            )
-        )
-        .distinct()
-    )
+    # All authenticated team members can view all operational cases
+    return query
 
 
 def _assert_case_visible(flow_case: FlowCase, current_user) -> None:
-    if current_user.role in STAFF_ROLES:
-        return
-    owns_case = flow_case.responsible_user_id == current_user.id
-    owns_request = bool(flow_case.request and flow_case.request.submitter_id == current_user.id)
-    owns_signal = any(signal.submitter_id == current_user.id for signal in (flow_case.signals or []))
-    if not (owns_case or owns_request or owns_signal):
-        raise HTTPException(status_code=403, detail="Access denied")
+    # All authenticated team members can view all operational cases
+    return
 
 
 def _assert_signal_visible(signal: FlowSignal, current_user) -> None:
-    if current_user.role in STAFF_ROLES:
-        return
-    owns_signal = signal.submitter_id == current_user.id
-    owns_request = bool(signal.request and signal.request.submitter_id == current_user.id)
-    case_responsible = bool(signal.case and signal.case.responsible_user_id == current_user.id)
-    if not (owns_signal or owns_request or case_responsible):
-        raise HTTPException(status_code=403, detail="Access denied")
+    # All authenticated team members can view all operational signals
+    return
 
 
 def _serialize_media(item: SignalMedia) -> dict:

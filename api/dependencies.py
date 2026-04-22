@@ -1,7 +1,7 @@
 """Dependency Injection для FastAPI: сессия БД, текущий пользователь."""
 from typing import AsyncGenerator
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Query, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -24,14 +24,16 @@ bearer_scheme = HTTPBearer(auto_error=False)
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
+    token: str | None = Query(None, alias="token"),
     db: AsyncSession = Depends(get_db),
 ):
-    if credentials is None:
+    raw_token = credentials.credentials if credentials else token
+    if raw_token is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
 
     try:
         payload = jwt.decode(
-            credentials.credentials,
+            raw_token,
             api_settings.API_SECRET_KEY,
             algorithms=["HS256"],
         )

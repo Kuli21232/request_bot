@@ -45,5 +45,8 @@ class Settings(BaseSettings):
     # Rate limiting
     RATE_LIMIT_PER_MINUTE: int = 10
 
+    # Response policy
+    RESPOND_ONLY_TO_ADMINS: bool = True
+
 
 settings = Settings()

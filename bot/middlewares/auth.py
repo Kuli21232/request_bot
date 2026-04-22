@@ -1,6 +1,7 @@
 from typing import Any, Awaitable, Callable
+
 from aiogram import BaseMiddleware
-from aiogram.types import Message
+from aiogram.types import CallbackQuery, Message
 
 from bot.database import AsyncSessionLocal
 from bot.database.repositories.user_repo import UserRepository
@@ -11,8 +12,8 @@ class AuthMiddleware(BaseMiddleware):
 
     async def __call__(
         self,
-        handler: Callable[[Message, dict[str, Any]], Awaitable[Any]],
-        event: Message,
+        handler: Callable[[Message | CallbackQuery, dict[str, Any]], Awaitable[Any]],
+        event: Message | CallbackQuery,
         data: dict[str, Any],
     ) -> Any:
         if event.from_user is None or event.from_user.is_bot:

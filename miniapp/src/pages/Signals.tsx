@@ -142,9 +142,11 @@ function SectionCard({ section }: { section: TopicSection }) {
                 ? `${getTopicKindLabel(section.topic_kind)}${section.group_title ? ` · ${section.group_title}` : ''}`
                 : section.topic_title}
             </span>
-            <span className="chip" style={{ background: '#eff6ff', color: '#1e40af' }} title="Роль топика в общем потоке">
-              {getTopicKindLabel(section.topic_kind)}
-            </span>
+            {!isGenericTopicTitle(section.topic_title) && (
+              <span className="chip" style={{ background: '#eff6ff', color: '#1e40af' }} title="Роль топика в общем потоке">
+                {getTopicKindLabel(section.topic_kind)}
+              </span>
+            )}
           </div>
           <div style={{ fontSize: 12, color: 'var(--text-soft)', lineHeight: 1.4 }}>
             {section.group_title && <span style={{ color: 'var(--brand)', fontWeight: 600 }}>{section.group_title} · </span>}

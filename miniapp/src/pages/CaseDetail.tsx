@@ -32,10 +32,12 @@ export default function CaseDetail() {
   const [selectedResponsible, setSelectedResponsible] = useState<string>('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [accessDenied, setAccessDenied] = useState(false)
 
   const load = async () => {
     if (!id) return
     setLoading(true)
+    setAccessDenied(false)
     try {
       const [caseData, profileData] = await Promise.all([
         getCase(Number(id)),
@@ -49,6 +51,8 @@ export default function CaseDetail() {
         const users = await getTeamUsers()
         setPeople(users)
       }
+    } catch (err: any) {
+      if (err?.response?.status === 403) setAccessDenied(true)
     } finally {
       setLoading(false)
     }
@@ -70,6 +74,7 @@ export default function CaseDetail() {
   }
 
   if (loading) return <div style={{ padding: '40px 0' }}><Loader /></div>
+  if (accessDenied) return <div style={{ padding: 20, color: 'var(--text-soft)' }}>Нет доступа к этой ситуации</div>
   if (!flowCase) return <div style={{ padding: 20, color: 'var(--text-soft)' }}>Ситуация не найдена</div>
 
   return (

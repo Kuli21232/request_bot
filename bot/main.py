@@ -16,7 +16,12 @@ from aiohttp.resolver import ThreadedResolver
 
 from bot.config import settings
 from bot.handlers import callbacks, commands, forum_messages
-from bot.middlewares import AuthMiddleware, RateLimitMiddleware, TopicResolverMiddleware
+from bot.middlewares import (
+    AdminOnlyInteractionMiddleware,
+    AuthMiddleware,
+    RateLimitMiddleware,
+    TopicResolverMiddleware,
+)
 from bot.services.llm_service import LLMService
 from bot.services.sla_monitor import setup_scheduler
 
@@ -111,6 +116,10 @@ def create_dispatcher() -> Dispatcher:
     dp.message.outer_middleware(AuthMiddleware())
     dp.message.outer_middleware(RateLimitMiddleware(rate=settings.RATE_LIMIT_PER_MINUTE))
     dp.message.outer_middleware(TopicResolverMiddleware())
+    dp.callback_query.outer_middleware(AuthMiddleware())
+
+    commands.router.message.middleware(AdminOnlyInteractionMiddleware())
+    callbacks.router.callback_query.middleware(AdminOnlyInteractionMiddleware())
 
     dp.include_router(commands.router)
     dp.include_router(forum_messages.router)

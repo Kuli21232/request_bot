@@ -24,6 +24,17 @@ LEARNING_SYSTEM_PROMPT = (
     "Верни только JSON."
 )
 
+VALID_TOPIC_KINDS = frozenset({
+    "compliance", "finance", "logistics", "reporting", "support",
+    "incident", "inventory", "operations", "mixed", "news",
+})
+
+VALID_SIGNAL_TYPES = frozenset({
+    "problem", "request", "status_update", "photo_report",
+    "delivery", "finance", "compliance", "inventory",
+    "chat/noise", "escalation", "news",
+})
+
 
 class TopicLearningService:
     def __init__(self) -> None:
@@ -219,13 +230,21 @@ class TopicLearningService:
         now = datetime.now(timezone.utc)
         dominant_signal_type = insights["dominant_signal_type"]
 
-        topic.topic_kind = (generated or {}).get("topic_kind") or insights["topic_kind_guess"] or topic.topic_kind
+        generated_kind = (generated or {}).get("topic_kind")
+        if generated_kind and generated_kind not in VALID_TOPIC_KINDS:
+            logger.warning("LLM returned unknown topic_kind=%r, ignoring", generated_kind)
+            generated_kind = None
+        topic.topic_kind = generated_kind or insights["topic_kind_guess"] or topic.topic_kind
         profile.profile_summary = (generated or {}).get(
             "profile_summary"
         ) or f"Топик '{topic.title}' чаще всего содержит сигналы типа '{dominant_signal_type}'."
 
-        allowed = (generated or {}).get("allowed_signal_types") or list(insights["kind_counts"].keys())[:6]
-        if dominant_signal_type and dominant_signal_type not in allowed:
+        raw_allowed = (generated or {}).get("allowed_signal_types") or list(insights["kind_counts"].keys())[:6]
+        # Filter out any unknown types that the LLM may have invented
+        allowed = [t for t in raw_allowed if t in VALID_SIGNAL_TYPES]
+        if not allowed:
+            allowed = list(insights["kind_counts"].keys())[:6]
+        if dominant_signal_type and dominant_signal_type in VALID_SIGNAL_TYPES and dominant_signal_type not in allowed:
             allowed = [dominant_signal_type, *allowed]
         profile.allowed_signal_types = list(dict.fromkeys(allowed))[:8]
 

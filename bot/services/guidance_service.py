@@ -39,7 +39,10 @@ class GuidanceService:
                 "generated": False,
             }
 
-        if self.llm.enabled:
+        has_context = bool(top_articles) or any(
+            item["recent_signals"] for item in topic_evidence
+        )
+        if self.llm.enabled and has_context:
             generated = await self._generate_with_ai(question, top_articles, topic_evidence, mode=mode)
             if generated:
                 return {

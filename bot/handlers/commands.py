@@ -282,14 +282,14 @@ async def cmd_digest(message: Message, db_user: User | None) -> None:
 @router.message(Command("next"))
 async def cmd_next_with_feedback(message: Message, db_user: User | None) -> None:
     if not _is_staff(db_user):
-        await message.reply("РџСЂРёРѕСЂРёС‚РµС‚С‹ РїРѕ РїРѕС‚РѕРєСѓ РґРѕСЃС‚СѓРїРЅС‹ РёСЃРїРѕР»РЅРёС‚РµР»СЏРј Рё СЂСѓРєРѕРІРѕРґРёС‚РµР»СЏРј.")
+        await message.reply("Приоритеты по потоку доступны исполнителям и руководителям.")
         return
 
     async def _build_next():
         async with AsyncSessionLocal() as session:
             service = AssistantService(session)
             return await service.answer(
-                "С‡С‚Рѕ СЃРµР№С‡Р°СЃ РЅСѓР¶РЅРѕ СЃРґРµР»Р°С‚СЊ РІ РїРµСЂРІСѓСЋ РѕС‡РµСЂРµРґСЊ",
+                "что сейчас нужно сделать в первую очередь",
                 current_chat_id=(message.chat.id if message.chat.type == "supergroup" else None),
             )
 

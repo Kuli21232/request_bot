@@ -98,7 +98,11 @@ class TopicAIEngine:
 
         if has_media:
             media_default = profile.default_actions.get("media_only")
-            if result["signal_type"] in {"request", "status_update"} and media_default:
+            if (
+                result["signal_type"] in {"request", "status_update"}
+                and media_default
+                and result.get("importance") not in {"high", "critical"}
+            ):
                 result["signal_type"] = "photo_report"
                 result["action_needed"] = media_default
 
@@ -141,15 +145,33 @@ class TopicAIEngine:
         if not signal_types:
             return
 
-        dominant_signal_type = max(signal_types.items(), key=lambda item: item[1])[0]
+        sorted_types = sorted(signal_types.items(), key=lambda item: item[1], reverse=True)
+        dominant_signal_type = sorted_types[0][0]
+        total = sum(c for _, c in sorted_types)
+        dominant_pct = round(sorted_types[0][1] / total * 100) if total else 0
+
         behavior_rules = dict(profile.behavior_rules or {})
         behavior_rules["dominant_signal_type"] = dominant_signal_type
+        behavior_rules["signal_type_distribution"] = {k: v for k, v in sorted_types[:5]}
         profile.behavior_rules = behavior_rules
-        topic.topic_kind = DOMINANT_KIND_MAP.get(dominant_signal_type, topic.topic_kind or "mixed")
-        profile.profile_summary = (
-            f"Топик '{topic.title}' чаще всего содержит сообщения типа "
-            f"'{dominant_signal_type}' и ведет себя как поток '{topic.topic_kind}'."
+
+        new_kind = DOMINANT_KIND_MAP.get(dominant_signal_type, topic.topic_kind or "mixed")
+        topic.topic_kind = new_kind
+
+        # Only overwrite summary if it looks like an auto-generated template (not manually set)
+        current_summary = profile.profile_summary or ""
+        is_auto_summary = (
+            not current_summary
+            or current_summary.startswith("AI-профиль для топика")
+            or current_summary.startswith("Топик '")
         )
+        if is_auto_summary:
+            secondary = f", также встречаются: {sorted_types[1][0]}" if len(sorted_types) > 1 else ""
+            profile.profile_summary = (
+                f"Топик «{topic.title}» — поток типа «{new_kind}». "
+                f"Доминирующий сигнал: {dominant_signal_type} ({dominant_pct}%){secondary}."
+            )
+
         topic.profile_version = (topic.profile_version or 1) + 1
 
     def sort_topics(self, topics: list[TelegramTopic], metrics: dict[int, dict]) -> list[dict]:
@@ -244,6 +266,7 @@ class TopicAIEngine:
                 item["metrics"]["attention_count"],
                 item["metrics"]["open_case_count"],
                 item["metrics"]["signal_count"],
+                -item["topic"].id,
             ),
             reverse=True,
         )

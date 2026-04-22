@@ -13,6 +13,7 @@ import SignalDetail from './pages/SignalDetail'
 import Signals from './pages/Signals'
 import Team from './pages/Team'
 import TeamProfile from './pages/TeamProfile'
+import TopicDetail from './pages/TopicDetail'
 import Topics from './pages/Topics'
 import WebApp from './telegram'
 import './index.css'
@@ -117,6 +118,7 @@ export default function App() {
           <Route path="/" element={<Dashboard />} />
           <Route path="/signals" element={<Signals />} />
           <Route path="/topics" element={<Topics />} />
+          <Route path="/topics/:id" element={<TopicDetail />} />
           <Route path="/signals/:id" element={<SignalDetail />} />
           <Route path="/cases" element={<Cases />} />
           <Route path="/cases/:id" element={<CaseDetail />} />

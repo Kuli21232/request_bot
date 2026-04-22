@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import { type FlowMediaItem, resolveApiUrl } from '../api/client'
+import { type FlowMediaItem, resolveApiUrlWithToken } from '../api/client'
 
 function isImage(item: FlowMediaItem) {
   return (item.mime_type || '').startsWith('image/')
@@ -42,8 +42,8 @@ export function MediaGallery({
           }}
         >
           {visibleItems.map((item) => {
-            const previewUrl = resolveApiUrl(item.preview_url || item.content_url)
-            const contentUrl = resolveApiUrl(item.content_url || item.preview_url)
+            const previewUrl = resolveApiUrlWithToken(item.preview_url || item.content_url)
+            const contentUrl = resolveApiUrlWithToken(item.content_url || item.preview_url)
             const image = isImage(item)
             return (
               <button
@@ -152,7 +152,7 @@ export function MediaGallery({
             <div style={{ padding: 16 }}>
               {isImage(selected) ? (
                 <img
-                  src={resolveApiUrl(selected.content_url || selected.preview_url)}
+                  src={resolveApiUrlWithToken(selected.content_url || selected.preview_url)}
                   alt={selected.file_name || mediaLabel(selected)}
                   style={{ width: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: 18, background: '#f8fafc' }}
                 />
@@ -200,7 +200,7 @@ export function MediaGallery({
                 </div>
                 {selected.can_open_content && (
                   <a
-                    href={resolveApiUrl(selected.content_url || selected.preview_url)}
+                    href={resolveApiUrlWithToken(selected.content_url || selected.preview_url)}
                     target="_blank"
                     rel="noreferrer"
                     style={{

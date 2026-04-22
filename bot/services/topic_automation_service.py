@@ -245,6 +245,7 @@ class TopicAutomationService:
                 item["metrics"]["attention_count"],
                 item["metrics"]["open_case_count"],
                 item["metrics"]["signal_count"],
+                -item["topic"].id,
             ),
             reverse=True,
         )
@@ -307,6 +308,20 @@ class TopicAutomationService:
             "follow_up_needed": follow_up_needed,
         }
 
+    _DOMINANT_KIND_LABELS: dict[str, str] = {
+        "problem": "технические проблемы",
+        "compliance": "вопросы ЕГАИС и маркировки",
+        "finance": "финансовые вопросы",
+        "delivery": "поставки и доставки",
+        "photo_report": "фотоотчёты",
+        "inventory": "остатки и товар",
+        "escalation": "эскалации",
+        "request": "операционные запросы",
+        "status_update": "статусные обновления",
+        "news": "новости",
+        "chat/noise": "рабочие переписки",
+    }
+
     def _build_summary(
         self,
         *,
@@ -319,24 +334,27 @@ class TopicAutomationService:
         follow_up_needed: bool,
     ) -> str:
         if not signal_examples:
-            return f"Топик «{topic_title}» пока только собирает контекст."
+            return f"Топик «{topic_title}» пока накапливает контекст — новых сигналов нет."
 
-        parts: list[str] = []
-        if dominant_kind:
-            parts.append(f"основной тип потока: {dominant_kind}")
-        if attention_count:
-            parts.append(f"есть {attention_count} сообщений, требующих внимания")
+        # Critical path: short punchy text for urgent topics
+        if critical_case_count and attention_count:
+            stores_hint = f" ({', '.join(top_stores[:2])})" if top_stores else ""
+            return (
+                f"«{topic_title}»{stores_hint}: {critical_case_count} крит. кейса, "
+                f"{attention_count} сигналов требуют разбора. {signal_examples[0]}"
+            )
         if critical_case_count:
-            parts.append(f"{critical_case_count} критичных ситуаций")
+            return f"«{topic_title}»: {critical_case_count} критичных ситуаций — требуется немедленный разбор."
+        if attention_count >= 3:
+            examples_hint = f" Последнее: {signal_examples[0]}" if signal_examples else ""
+            return f"«{topic_title}»: накопилось {attention_count} сигналов без реакции.{examples_hint}"
         if follow_up_needed:
-            parts.append("по теме нужен follow-up")
-        if top_stores:
-            parts.append(f"чаще всего упоминаются точки: {', '.join(top_stores[:3])}")
-        if signal_examples:
-            parts.append(f"последние темы: {'; '.join(signal_examples[:2])}")
-        if not parts:
-            parts.append(f"в топике «{topic_title}» идет обычный рабочий поток")
-        return "В топике " + " и ".join(parts) + "."
+            return f"«{topic_title}»: открытые кейсы без обновления более 6 часов — нужен follow-up."
+
+        kind_label = self._DOMINANT_KIND_LABELS.get(dominant_kind or "", dominant_kind or "сигналы")
+        stores_hint = f", точки: {', '.join(top_stores[:2])}" if top_stores else ""
+        examples_hint = f" Последнее: {signal_examples[0]}" if signal_examples else ""
+        return f"«{topic_title}»: активный поток ({kind_label}{stores_hint}).{examples_hint}"
 
     @staticmethod
     def _build_group_focus(

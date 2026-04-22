@@ -3,6 +3,8 @@ import logging
 
 from aiogram import Bot
 
+from bot.access import can_receive_bot_responses
+from bot.config import settings
 from bot.database import AsyncSessionLocal
 from bot.database.repositories.knowledge_repo import KnowledgeRepository
 from bot.database.repositories.user_repo import UserRepository
@@ -145,6 +147,17 @@ class NotificationService:
         )
 
     async def _safe_send(self, chat_id: int, text: str, **kwargs) -> None:
+        if settings.RESPOND_ONLY_TO_ADMINS:
+            async with AsyncSessionLocal() as session:
+                repo = UserRepository(session)
+                recipient = await repo.get_by_telegram_id(chat_id)
+                if not can_receive_bot_responses(recipient):
+                    logger.debug(
+                        "Skipping notification to non-admin recipient %s because admin-only response mode is enabled",
+                        chat_id,
+                    )
+                    return
+
         try:
             await self.bot.send_message(chat_id=chat_id, text=text, parse_mode="HTML", **kwargs)
         except Exception as exc:
