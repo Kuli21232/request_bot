@@ -179,35 +179,32 @@ class AssistantService:
             target_user=user,
             viewer_user=user,
         )
-        lines = [f"Персональная сводка для {user.first_name}:"]
+        lines = [f"<b>👤 Сводка для {user.first_name}</b>"]
         if profile.get("ai_summary"):
             lines.append(profile["ai_summary"])
 
         assigned_cases = profile.get("assigned_cases") or []
         if assigned_cases:
-            lines.append("Открытые ответственности:")
+            lines.append("\n<b>Открытые ответственности:</b>")
             for index, flow_case in enumerate(assigned_cases[:5], start=1):
-                lines.append(
-                    f"{index}. {flow_case['title']} — приоритет {flow_case['priority']}, "
-                    f"топик {flow_case.get('primary_topic_title') or 'без топика'}."
-                )
+                topic = flow_case.get("primary_topic_title") or "без топика"
+                lines.append(f"{index}. <b>{flow_case['title']}</b> — {topic}")
         else:
-            lines.append("Открытых назначенных ситуаций сейчас нет.")
+            lines.append("\nОткрытых назначенных ситуаций сейчас нет.")
 
         recommendations = profile.get("ai_recommendations") or []
         if recommendations:
-            lines.append("Рекомендации:")
+            lines.append("\n<b>Рекомендации:</b>")
             for item in recommendations[:4]:
                 lines.append(f"• {item}")
 
         topic_groups = profile.get("topic_groups") or []
         if topic_groups:
-            lines.append("Основные темы пользователя:")
+            lines.append("\n<b>Основные темы:</b>")
             for topic in topic_groups[:4]:
-                lines.append(
-                    f"• {topic['topic_title']}: сообщений {topic['signal_count']}, "
-                    f"внимание {topic['requires_attention_count']}."
-                )
+                attn = topic.get("requires_attention_count", 0)
+                attn_str = f" ⚠ {attn}" if attn else ""
+                lines.append(f"• {topic['topic_title']}: <b>{topic['signal_count']}</b> сообщ.{attn_str}")
         return "\n".join(lines)
 
     @staticmethod
@@ -248,24 +245,23 @@ class AssistantService:
         if not action_board:
             return f"Сейчас {scope} нет тем, которые AI поднял как приоритетные. Можно наблюдать поток в штатном режиме."
 
-        lines = [f"Что сделать сейчас {scope}:"]
+        lines = [f"<b>Что сделать сейчас {scope}:</b>"]
         for index, item in enumerate(action_board[:5], start=1):
             details = []
             if item.get("critical_case_count"):
-                details.append(f"критичных ситуаций: {item['critical_case_count']}")
+                details.append(f"🔴 крит. ситуаций: <b>{item['critical_case_count']}</b>")
             if item.get("attention_count"):
-                details.append(f"сообщений с вниманием: {item['attention_count']}")
+                details.append(f"⚠ внимание: <b>{item['attention_count']}</b>")
             if item.get("follow_up_needed"):
-                details.append("нужен follow-up")
+                details.append("↩ нужен follow-up")
             if item.get("open_case_count"):
-                details.append(f"открытых ситуаций: {item['open_case_count']}")
-            lines.append(
-                f"{index}. {item['topic_title']} ({item.get('group_title') or 'группа'}) — "
-                f"{AssistantService._action_label(item.get('recommended_action'))}. "
-                f"{item.get('summary') or 'Тема требует разбора.'}"
-            )
+                details.append(f"📂 ситуации: <b>{item['open_case_count']}</b>")
+            action = AssistantService._action_label(item.get('recommended_action'))
+            summary = item.get('summary') or 'Тема требует разбора.'
+            lines.append(f"\n{index}. <b>{item['topic_title']}</b> — {action}")
+            lines.append(f"   {summary}")
             if details:
-                lines.append("   " + ", ".join(details))
+                lines.append("   " + " · ".join(details))
         return "\n".join(lines)
 
     @staticmethod
@@ -276,13 +272,17 @@ class AssistantService:
             return "Пока не вижу топиков с собранным контекстом."
 
         scope = f"в группе «{group_match.title}»" if group_match is not None else "по всем группам"
-        lines = [f"Топики {scope}:"]
+        lines = [f"<b>Топики {scope}:</b>"]
         for index, section in enumerate(sections[:8], start=1):
-            lines.append(
-                f"{index}. {section['topic_title']} — приоритет {section['priority']}, "
-                f"внимание {section['stats'].get('attention_count', 0)}, "
-                f"ситуации {section['stats'].get('open_case_count', 0)}."
-            )
+            attn = section['stats'].get('attention_count', 0)
+            cases = section['stats'].get('open_case_count', 0)
+            flags = []
+            if attn:
+                flags.append(f"⚠ {attn}")
+            if cases:
+                flags.append(f"📂 {cases}")
+            flag_str = "  " + " · ".join(flags) if flags else ""
+            lines.append(f"{index}. <b>{section['topic_title']}</b>{flag_str}")
         return "\n".join(lines)
 
     @staticmethod
@@ -292,31 +292,40 @@ class AssistantService:
             return f"Не нашел подходящий топик {scope}, чтобы собрать сводку."
 
         primary = topic_sections[0]
-        lines = [
-            f"Сводка по теме «{primary['topic_title']}»"
-            + (f" в группе «{primary['group_title']}»:" if primary.get("group_title") else ":"),
-            primary.get("automation", {}).get("summary")
-            or primary.get("profile_summary")
-            or "По теме уже собран рабочий контекст.",
-        ]
-        lines.append(
-            f"Сигналов: {primary['stats'].get('signal_count', 0)}, "
-            f"требуют внимания: {primary['stats'].get('attention_count', 0)}, "
-            f"активных ситуаций: {primary['stats'].get('open_case_count', 0)}."
-        )
+        group_hint = f" · {primary['group_title']}" if primary.get("group_title") else ""
+        lines = [f"<b>📌 {primary['topic_title']}{group_hint}</b>"]
+
+        ai_summary = (primary.get("automation") or {}).get("summary") or primary.get("profile_summary")
+        if ai_summary:
+            lines.append(ai_summary)
+
+        stats = primary.get("stats", {})
+        stat_parts = []
+        if stats.get("signal_count"):
+            stat_parts.append(f"сигналов: <b>{stats['signal_count']}</b>")
+        if stats.get("attention_count"):
+            stat_parts.append(f"⚠ внимание: <b>{stats['attention_count']}</b>")
+        if stats.get("open_case_count"):
+            stat_parts.append(f"📂 ситуации: <b>{stats['open_case_count']}</b>")
+        if stat_parts:
+            lines.append(" · ".join(stat_parts))
+
         if primary.get("cases"):
-            case_titles = ", ".join(case["title"] for case in primary["cases"][:3])
-            lines.append(f"Связанные ситуации: {case_titles}.")
+            lines.append("\n<b>Ситуации:</b>")
+            for case in primary["cases"][:3]:
+                lines.append(f"• {case['title']}")
+
         if primary.get("signals"):
-            signal_summaries = "; ".join(
-                (signal.summary or signal.body[:80]).strip()
-                for signal in primary["signals"][:3]
-            )
-            if signal_summaries:
-                lines.append(f"Последние сигналы: {signal_summaries}.")
+            lines.append("\n<b>Последние сообщения:</b>")
+            for signal in primary["signals"][:4]:
+                text = (signal.summary or getattr(signal, "body", "") or "")[:90].strip()
+                store = getattr(signal, "store", None)
+                prefix = f"{store}: " if store else ""
+                lines.append(f"• {prefix}{text}")
+
         if len(topic_sections) > 1:
-            related = ", ".join(section["topic_title"] for section in topic_sections[1:3])
-            lines.append(f"Рядом по смыслу еще темы: {related}.")
+            related = ", ".join(f"«{section['topic_title']}»" for section in topic_sections[1:3])
+            lines.append(f"\nСм. также: {related}")
         return "\n".join(lines)
 
     @staticmethod
@@ -324,32 +333,37 @@ class AssistantService:
         if digest is None:
             if not sections:
                 return f"По группе «{group_title}» пока мало данных для сводки."
-            top_topics = ", ".join(section["topic_title"] for section in sections[:4])
+            top_topics = ", ".join(f"«{section['topic_title']}»" for section in sections[:4])
             return f"По группе «{group_title}» уже видны темы: {top_topics}, но полной сводки пока нет."
 
-        lines = [
-            f"Сводка по группе «{group_title}»:",
-            digest.get("recommended_focus") or "Группа под контролем.",
-            f"Сигналов: {digest.get('signal_count', 0)}, "
-            f"требуют внимания: {digest.get('attention_count', 0)}, "
-            f"активных ситуаций: {digest.get('open_case_count', 0)}, "
-            f"критичных: {digest.get('critical_case_count', 0)}.",
-        ]
+        lines = [f"<b>📊 Сводка по группе «{group_title}»</b>"]
+
+        focus = digest.get("recommended_focus")
+        if focus:
+            lines.append(focus)
+
+        stat_parts = []
+        if digest.get("signal_count"):
+            stat_parts.append(f"сигналов: <b>{digest['signal_count']}</b>")
+        if digest.get("attention_count"):
+            stat_parts.append(f"⚠ внимание: <b>{digest['attention_count']}</b>")
+        if digest.get("open_case_count"):
+            stat_parts.append(f"📂 ситуации: <b>{digest['open_case_count']}</b>")
+        if digest.get("critical_case_count"):
+            stat_parts.append(f"🔴 крит.: <b>{digest['critical_case_count']}</b>")
+        if stat_parts:
+            lines.append(" · ".join(stat_parts))
+
         if digest.get("top_topics"):
-            lines.append(
-                "Главные темы: "
-                + "; ".join(
-                    f"{topic['topic_title']} ({AssistantService._action_label(topic.get('recommended_action'))})"
-                    for topic in digest["top_topics"][:4]
-                )
-                + "."
-            )
+            lines.append("\n<b>Главные темы:</b>")
+            for topic in digest["top_topics"][:5]:
+                action = AssistantService._action_label(topic.get("recommended_action"))
+                lines.append(f"• <b>{topic['topic_title']}</b> — {action}")
+
         if action_board:
-            lines.append(
-                "Что сделать сейчас: "
-                + "; ".join(item["topic_title"] for item in action_board[:3])
-                + "."
-            )
+            lines.append("\n<b>Требуют действия:</b>")
+            for item in action_board[:3]:
+                lines.append(f"• {item['topic_title']}")
         return "\n".join(lines)
 
     @staticmethod
@@ -363,29 +377,35 @@ class AssistantService:
         if not group_digests and not action_board and not sections:
             return "Пока мало данных, чтобы собрать общую сводку по потоку."
 
-        lines = ["Общая сводка по потоку:"]
+        lines = ["<b>🗂 Общая сводка по потоку</b>"]
+
         if action_board:
-            lines.append(
-                "Сейчас в приоритете: "
-                + "; ".join(
-                    f"{item['topic_title']} ({item.get('group_title') or 'группа'})"
-                    for item in action_board[:4]
-                )
-                + "."
-            )
+            lines.append("\n<b>Сейчас в приоритете:</b>")
+            for item in action_board[:4]:
+                group_hint = f" · {item['group_title']}" if item.get("group_title") else ""
+                flags = []
+                if item.get("critical_case_count"):
+                    flags.append(f"🔴 {item['critical_case_count']}")
+                if item.get("attention_count"):
+                    flags.append(f"⚠ {item['attention_count']}")
+                flag_str = "  " + " ".join(flags) if flags else ""
+                lines.append(f"• <b>{item['topic_title']}</b>{group_hint}{flag_str}")
+
         if group_digests:
-            lines.append(
-                "По группам: "
-                + "; ".join(
-                    f"{item['group_title']} — внимание {item.get('attention_count', 0)}, критичных {item.get('critical_case_count', 0)}"
-                    for item in group_digests[:3]
-                )
-                + "."
-            )
-        if sections:
-            lines.append(
-                "Главные темы: " + "; ".join(section["topic_title"] for section in sections[:5]) + "."
-            )
+            lines.append("\n<b>По группам:</b>")
+            for item in group_digests[:3]:
+                parts = []
+                if item.get("attention_count"):
+                    parts.append(f"внимание: {item['attention_count']}")
+                if item.get("critical_case_count"):
+                    parts.append(f"крит.: {item['critical_case_count']}")
+                detail = ", ".join(parts) if parts else "штатный режим"
+                lines.append(f"• <b>{item['group_title']}</b> — {detail}")
+
+        if sections and not action_board:
+            lines.append("\n<b>Активные темы:</b>")
+            for section in sections[:5]:
+                lines.append(f"• {section['topic_title']}")
         return "\n".join(lines)
 
     async def _generate_answer(self, query: str, payload: str, *, mode: str) -> str | None:
@@ -405,7 +425,9 @@ class AssistantService:
             f"{task}\n\n"
             f"Запрос пользователя:\n{query}\n\n"
             f"Доказательства:\n{payload}\n\n"
-            "Ответь по-русски в 4-8 коротких строках. "
+            "Ответь по-русски в 4-8 строках. "
+            "Используй HTML-форматирование: <b>жирный</b> для ключевых слов и чисел, "
+            "• перед каждым пунктом списка. "
             "Не добавляй факты за пределами доказательств."
         )
         generated = await self.llm.generate_text(

@@ -9,8 +9,20 @@ import {
   type TeamProfile,
   type TeamUser,
 } from '../api/client'
+import { AuthorAvatar } from '../components/AuthorAvatar'
 import { Loader } from '../components/Loader'
-import { getCasePriorityLabel, getCaseStatusLabel, getReadableSignalTitle, getRecommendedActionLabel, getSignalKindLabel } from '../utils/flow'
+import { getCasePriorityLabel, getCaseStatusLabel, getReadableSignalTitle, getRecommendedActionLabel, getSignalKindHint, getSignalKindLabel } from '../utils/flow'
+
+function timeAgo(iso?: string) {
+  if (!iso) return ''
+  const diff = Date.now() - new Date(iso).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return 'только что'
+  if (mins < 60) return `${mins} мин`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs} ч`
+  return `${Math.floor(hrs / 24)} д`
+}
 
 export default function CaseDetail() {
   const { id } = useParams()
@@ -162,26 +174,48 @@ export default function CaseDetail() {
       <div className="screen-section">
         <section className="glass-card" style={{ padding: 16 }}>
           <div className="section-title" style={{ fontSize: 17, marginBottom: 10 }}>Какие сообщения вошли</div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            {(flowCase.signals ?? []).map((signal) => (
-              <Link key={signal.id} to={`/signals/${signal.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
-                <div className="soft-card" style={{ padding: '12px 13px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 6 }}>
-                    <span className="pill" style={{ background: '#eff6ff', color: '#1d4ed8' }}>{getSignalKindLabel(signal.kind)}</span>
-                    {signal.store && <span className="pill" style={{ background: '#f1f5f9', color: '#334155' }}>{signal.store}</span>}
-                    {signal.submitter_id && (
-                      <span className="pill" style={{ background: '#ecfeff', color: '#0f766e' }}>
-                        {signal.submitter_name || 'Автор'}
+          {(flowCase.signals ?? []).length === 0 ? (
+            <div style={{ fontSize: 13, color: 'var(--text-soft)', padding: '6px 0' }}>
+              Сообщений пока нет.
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {(flowCase.signals ?? []).map((signal) => (
+                <Link key={signal.id} to={`/signals/${signal.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+                  <div className="soft-card" style={{ padding: '12px 13px' }}>
+                    <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', marginBottom: 8 }}>
+                      <AuthorAvatar name={signal.submitter_name} userId={signal.submitter_id} size={30} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
+                          <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text-main)' }}>
+                            {signal.submitter_name || 'Автор не определён'}
+                          </span>
+                          {signal.submitter_username && (
+                            <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>@{signal.submitter_username}</span>
+                          )}
+                          <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 'auto' }}>
+                            {timeAgo(signal.happened_at)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--text-main)', lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>
+                      {getReadableSignalTitle(signal)}
+                    </div>
+                    <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginTop: 8 }}>
+                      <span className="chip" style={{ background: '#eff6ff', color: '#1d4ed8' }} title={getSignalKindHint(signal.kind)}>
+                        {getSignalKindLabel(signal.kind)}
                       </span>
-                    )}
+                      {signal.store && <span className="chip pill-neutral">{signal.store}</span>}
+                      {signal.requires_attention && (
+                        <span className="chip" style={{ background: '#fee2e2', color: '#b91c1c' }}>⚠ Внимание</span>
+                      )}
+                    </div>
                   </div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-main)', lineHeight: 1.35 }}>
-                    {getReadableSignalTitle(signal)}
-                  </div>
-                </div>
-              </Link>
-            ))}
-          </div>
+                </Link>
+              ))}
+            </div>
+          )}
         </section>
       </div>
     </div>

@@ -545,6 +545,23 @@ export const getTopics = async (): Promise<Topic[]> => {
   return res.data
 }
 
+export const getTopicDetail = async (id: number): Promise<Topic> => {
+  const res = await api.get(`/api/v1/topics/${id}`)
+  return res.data
+}
+
+export const updateTopicMeta = async (
+  id: number,
+  body: { title?: string; icon_emoji?: string | null; is_active?: boolean },
+): Promise<Topic> => {
+  const res = await api.patch(`/api/v1/topics/${id}`, body)
+  return res.data
+}
+
+export const deleteTopic = async (id: number): Promise<void> => {
+  await api.delete(`/api/v1/topics/${id}`)
+}
+
 export const getDepartments = async (): Promise<Department[]> => {
   const res = await api.get('/api/v1/departments')
   return res.data
@@ -594,6 +611,15 @@ export const resolveApiUrl = (path?: string | null) => {
   if (!path) return ''
   if (/^https?:\/\//i.test(path)) return path
   return `${API_URL}${path}`
+}
+
+export const resolveApiUrlWithToken = (path?: string | null) => {
+  const base = resolveApiUrl(path)
+  if (!base) return ''
+  const token = localStorage.getItem('jwt_token')
+  if (!token) return base
+  const sep = base.includes('?') ? '&' : '?'
+  return `${base}${sep}token=${encodeURIComponent(token)}`
 }
 
 export default api

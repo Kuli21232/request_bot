@@ -4,6 +4,7 @@ import logging
 from aiogram import Bot, F, Router
 from aiogram.types import Message
 
+from bot.access import can_receive_bot_responses
 from bot.config import settings
 from bot.database import AsyncSessionLocal
 from bot.database.repositories.flow_repo import FlowRepository
@@ -72,6 +73,11 @@ async def handle_forum_message(
     has_media = any(media_flags.values())
 
     if not content and not attachments:
+        return
+
+    # Fast pre-filter: skip pure chat noise entirely — no DB writes at all
+    if AIClassifier.is_definitely_noise(content, has_media=has_media):
+        logger.debug("Skipping noise message in topic %s (pre-filter)", topic.title)
         return
 
     auto_router = AutoRouter()
@@ -175,6 +181,8 @@ async def handle_forum_message(
             body=content or summary,
             case_key=case_key,
             store=store,
+            topic_id=stored_topic.id,
+            kind=signal_type,
         )
         matched_case = case_match.case
         match_score = case_match.score
@@ -316,7 +324,7 @@ async def handle_forum_message(
         request_id=new_request.id if new_request else signal.id,
     )
 
-    if requires_attention or created_case or new_request is not None:
+    if can_receive_bot_responses(db_user) and (requires_attention or created_case or new_request is not None):
         await message.reply("\n".join(response_lines), reply_markup=keyboard, parse_mode="HTML")
 
     if new_request is not None and final_department is not None:
@@ -336,6 +344,8 @@ def _signal_type_label(signal_type: str) -> str:
         "chat/noise": "Шум/уточнение",
         "escalation": "Эскалация",
         "news": "Новость",
+        "incident": "Инцидент",
+        "hr": "HR/персонал",
     }
     return labels.get(signal_type, signal_type)
 

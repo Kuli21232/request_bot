@@ -1,5 +1,6 @@
 """Telegram topics and AI profiles."""
 from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -8,20 +9,30 @@ from api.dependencies import get_current_user, get_db, require_admin
 from bot.services.topic_learning_service import TopicLearningService
 from models.topic import TelegramTopic, TopicAIProfile
 
+
+class TopicMetaUpdate(BaseModel):
+    title: str | None = Field(default=None, max_length=255)
+    icon_emoji: str | None = Field(default=None, max_length=32)
+    is_active: bool | None = None
+
 router = APIRouter(prefix="/api/v1/topics", tags=["topics"])
 
 
 @router.get("")
 async def list_topics(
+    include_archived: bool = False,
     current_user=Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
+    query = (
         select(TelegramTopic, TopicAIProfile)
         .options(selectinload(TelegramTopic.group))
         .join(TopicAIProfile, TopicAIProfile.topic_id == TelegramTopic.id, isouter=True)
         .order_by(TelegramTopic.last_seen_at.desc().nullslast())
     )
+    if not include_archived:
+        query = query.where(TelegramTopic.is_active.is_(True))
+    result = await db.execute(query)
     rows = result.all()
     return [_serialize_topic(topic, profile) for topic, profile in rows]
 
@@ -43,6 +54,60 @@ async def get_topic(
         raise HTTPException(status_code=404, detail="Topic not found")
     topic, profile = row
     return _serialize_topic(topic, profile, full=True)
+
+
+@router.patch("/{topic_id}")
+async def update_topic_meta(
+    topic_id: int,
+    body: TopicMetaUpdate,
+    current_user=Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    topic = await db.get(TelegramTopic, topic_id)
+    if topic is None:
+        raise HTTPException(status_code=404, detail="Topic not found")
+
+    data = body.model_dump(exclude_unset=True)
+    if "title" in data:
+        new_title = (data["title"] or "").strip()
+        if not new_title:
+            raise HTTPException(status_code=400, detail="Title must not be empty")
+        topic.title = new_title
+    if "icon_emoji" in data:
+        topic.icon_emoji = data["icon_emoji"] or None
+    if "is_active" in data and data["is_active"] is not None:
+        topic.is_active = bool(data["is_active"])
+
+    await db.commit()
+    await db.refresh(topic)
+
+    result = await db.execute(
+        select(TelegramTopic, TopicAIProfile)
+        .options(selectinload(TelegramTopic.group))
+        .join(TopicAIProfile, TopicAIProfile.topic_id == TelegramTopic.id, isouter=True)
+        .where(TelegramTopic.id == topic_id)
+    )
+    row = result.one_or_none()
+    topic, profile = row if row else (topic, None)
+    return _serialize_topic(topic, profile, full=True)
+
+
+@router.delete("/{topic_id}", status_code=204)
+async def delete_topic(
+    topic_id: int,
+    current_user=Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Soft-delete: mark topic inactive so it disappears from the mini app.
+
+    Hard-delete would cascade into flow signals/cases — we keep history instead.
+    """
+    topic = await db.get(TelegramTopic, topic_id)
+    if topic is None:
+        raise HTTPException(status_code=404, detail="Topic not found")
+    topic.is_active = False
+    await db.commit()
+    return None
 
 
 @router.patch("/{topic_id}/profile")

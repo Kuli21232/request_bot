@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { getSignal, type FlowSignalDetail } from '../api/client'
+import { AuthorAvatar } from '../components/AuthorAvatar'
 import { Loader } from '../components/Loader'
 import { MediaGallery } from '../components/MediaGallery'
 import {
@@ -112,10 +113,16 @@ export default function SignalDetail() {
           <div style={{ display: 'grid', gap: 14 }}>
             {signal.submitter_id ? (
               <Link to={`/team/${signal.submitter_id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
-                <div className="soft-card" style={{ padding: '13px 13px 12px' }}>
-                  <div style={{ fontSize: 12, color: 'var(--text-soft)', marginBottom: 6 }}>Отправитель</div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-main)' }}>
-                    {signal.submitter_name || 'Сотрудник'} {signal.submitter_username ? `(@${signal.submitter_username})` : ''}
+                <div className="soft-card" style={{ padding: '13px 13px 12px', display: 'flex', gap: 12, alignItems: 'center' }}>
+                  <AuthorAvatar name={signal.submitter_name} userId={signal.submitter_id} size={40} />
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 12, color: 'var(--text-soft)', marginBottom: 3 }}>Отправитель</div>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-main)' }}>
+                      {signal.submitter_name || 'Сотрудник'}
+                    </div>
+                    {signal.submitter_username && (
+                      <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 2 }}>@{signal.submitter_username}</div>
+                    )}
                   </div>
                 </div>
               </Link>

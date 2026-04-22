@@ -3,15 +3,29 @@ import type { FlowCase, FlowSignal, Topic, TopicSection } from '../api/client'
 const SIGNAL_KIND_LABELS: Record<string, string> = {
   problem: 'Проблема',
   request: 'Запрос',
-  status_update: 'Обновление',
-  photo_report: 'Фотоотчет',
+  status_update: 'Статус',
+  photo_report: 'Фото',
   delivery: 'Доставка',
   finance: 'Финансы',
   compliance: 'Контроль',
   inventory: 'Товар',
-  'chat/noise': 'Шум',
+  'chat/noise': 'Болтовня',
   escalation: 'Срочно',
   news: 'Новости',
+}
+
+const SIGNAL_KIND_HINTS: Record<string, string> = {
+  problem: 'Что-то сломалось или требует починки',
+  request: 'Сотрудник просит что-то сделать или привезти',
+  status_update: 'Короткий апдейт о ходе дел: начали, сделали, закончили',
+  photo_report: 'Фотография или видео с точки — отчёт о работе',
+  delivery: 'Связанное с доставкой товара/сырья',
+  finance: 'Про деньги: оплата, возврат, касса',
+  compliance: 'ЕГАИС / проверки / контроль',
+  inventory: 'Остатки, товар, заказ у поставщика',
+  'chat/noise': 'Болтовня в чате, не требует действия',
+  escalation: 'Срочно — надо среагировать сейчас',
+  news: 'Общая новость или объявление',
 }
 
 const IMPORTANCE_LABELS: Record<string, string> = {
@@ -67,6 +81,44 @@ const TOPIC_KIND_LABELS: Record<string, string> = {
 export function getSignalKindLabel(kind?: string) {
   if (!kind) return 'Сообщение'
   return SIGNAL_KIND_LABELS[kind] ?? kind
+}
+
+export function getSignalKindHint(kind?: string) {
+  if (!kind) return ''
+  return SIGNAL_KIND_HINTS[kind] ?? ''
+}
+
+const GENERIC_TOPIC_TITLE = /^topic\s*\d+$/i
+
+export function isGenericTopicTitle(title?: string | null): boolean {
+  if (!title) return true
+  return GENERIC_TOPIC_TITLE.test(title.trim())
+}
+
+export function getTopicDisplayTitle(topic: Pick<Topic, 'title' | 'topic_kind' | 'group_title' | 'profile'>): string {
+  if (topic.title && !isGenericTopicTitle(topic.title)) return topic.title
+  const summary = topic.profile?.automation?.summary ?? topic.profile?.profile_summary
+  if (summary) {
+    const firstPhrase = summary.split(/[.!?\n]/)[0]?.trim()
+    if (firstPhrase && firstPhrase.length >= 3 && firstPhrase.length <= 70) return firstPhrase
+  }
+  const kind = getTopicKindLabel(topic.topic_kind)
+  if (topic.group_title) return `${kind} · ${topic.group_title}`
+  return kind
+}
+
+export function getAuthorInitial(name?: string | null): string {
+  if (!name) return '?'
+  const trimmed = name.trim()
+  if (!trimmed) return '?'
+  return trimmed[0].toUpperCase()
+}
+
+export function getAuthorColor(seed?: number | string | null): string {
+  const palette = ['#2563eb', '#0f766e', '#9333ea', '#ea580c', '#0891b2', '#be185d', '#4d7c0f', '#1d4ed8']
+  if (seed == null) return palette[0]
+  const n = typeof seed === 'number' ? seed : Array.from(String(seed)).reduce((acc, ch) => acc + ch.charCodeAt(0), 0)
+  return palette[Math.abs(n) % palette.length]
 }
 
 export function getImportanceLabel(value?: string) {
